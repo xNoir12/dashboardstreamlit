@@ -1,0 +1,23 @@
+filename,kategori,deskripsi
+A00_raw_snapshot_summary.csv,A00,Output pipeline V5
+A01_eda_awal_vs_eda_final_comparison_log.csv,A01,Output pipeline V5
+A02_before_after_cleaning_summary_for_ppt.csv,A02,Output pipeline V5
+B00_data_cleaning_log_master.csv,B00,Output pipeline V5
+B00_data_cleaning_log_master.md,B00,Output pipeline V5
+C01_row_repair_detail_log.csv,C01,Output pipeline V5
+C02_missingness_profile_before_handling.csv,C02,Output pipeline V5
+C03_column_drop_decision_log.csv,C03,Output pipeline V5
+C04_dropped_column_missing_rows_log.csv,C04,Output pipeline V5
+C05_critical_standardization_detail_log.csv,C05,Output pipeline V5
+C05b_category_standardization_detail_log.csv,C05b,Output pipeline V5
+C05c_period_fix_detail_log.csv,C05c,Output pipeline V5
+C06_imputation_detail_log.csv,C06,Output pipeline V5
+C06_imputation_summary_log.csv,C06,Output pipeline V5
+C07_outlier_source_audit_log.csv,C07,Output pipeline V5
+C08_duplicate_detail_log.csv,C08,Output pipeline V5
+C08_duplicate_group_summary_log.csv,C08,Output pipeline V5
+C09_recomputed_indicator_affected_rows_log.csv,C09,Output pipeline V5
+C10_final_validation_assertion_log.csv,C10,Output pipeline V5
+D00_ispu_jakarta_final_sot_v5_drop_over50.csv,D00,Output pipeline V5
+D01_assumption_register.csv,D01,Output pipeline V5
+D02_limitations_register.csv,D02,Output pipeline V5
