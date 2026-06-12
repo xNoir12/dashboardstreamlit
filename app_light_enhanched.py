@@ -525,19 +525,51 @@ def add_unhealthy_rate_reference(fig, target=20):
     return fig
 
 
-def period_trend(df, granularity):
+def period_trend(df, granularity, focus_year=None):
     if granularity == "Harian":
         return df.groupby("tanggal", as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tanggal"), "tanggal", "Tanggal"
+
     if granularity == "Bulanan":
-        return df.groupby("tahun_bulan", as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun_bulan"), "tahun_bulan", "Bulan"
+        working = df.copy()
+        x_col = "tahun_bulan"
+        x_title = "Bulan"
+
+        # Untuk kebutuhan monitoring stakeholder, mode bulanan dapat difokuskan ke 1 tahun.
+        # X-axis menjadi Jan–Des, bukan deret panjang lintas tahun.
+        if focus_year is not None:
+            working = working[working["tahun"] == focus_year].copy()
+            x_col = "bulan_abbr"
+
+        trend = (
+            working.groupby(["bulan", x_col], as_index=False)
+            .agg(rata_rata_ispu=("max", "mean"))
+            .sort_values("bulan")
+        )
+        return trend, x_col, x_title
+
     return df.groupby("tahun", as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun"), "tahun", "Tahun"
 
 
-def station_period_trend(df, granularity):
+def station_period_trend(df, granularity, focus_year=None):
     if granularity == "Harian":
         return df.groupby(["tanggal", "stasiun"], as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tanggal"), "tanggal"
+
     if granularity == "Bulanan":
-        return df.groupby(["tahun_bulan", "stasiun"], as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun_bulan"), "tahun_bulan"
+        working = df.copy()
+        x_col = "tahun_bulan"
+
+        # Untuk mode bulanan yang terpantau per tahun, tampilkan Jan–Des pada tahun fokus.
+        if focus_year is not None:
+            working = working[working["tahun"] == focus_year].copy()
+            x_col = "bulan_abbr"
+
+        trend = (
+            working.groupby(["bulan", x_col, "stasiun"], as_index=False)
+            .agg(rata_rata_ispu=("max", "mean"))
+            .sort_values("bulan")
+        )
+        return trend, x_col
+
     return df.groupby(["tahun", "stasiun"], as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun"), "tahun"
 
 
@@ -726,30 +758,49 @@ with tab2:
     granularity = st.radio("Granularitas", ["Harian", "Bulanan", "Tahunan"], horizontal=True, index=1)
     compare_mode = st.radio("Mode perbandingan", ["Rata-rata Jakarta", "Per Stasiun"], horizontal=True, index=1)
 
+    focus_year = None
+    if granularity == "Bulanan":
+        available_years = sorted(filtered_df["tahun"].dropna().astype(int).unique().tolist())
+        default_year_index = len(available_years) - 1 if available_years else 0
+        focus_year = st.selectbox(
+            "Tahun fokus untuk tampilan bulanan",
+            available_years,
+            index=default_year_index,
+            help=(
+                "Mode bulanan difokuskan ke satu tahun agar sumbu X hanya menampilkan Jan–Des. "
+                "Ini lebih sesuai untuk monitoring dan pengambilan insight dalam periode tahunan."
+            ),
+        )
+        st.caption(
+            f"Mode bulanan aktif: grafik menampilkan pola Jan–Des tahun {focus_year}, bukan deret bulan lintas tahun."
+        )
+
     threshold_note()
 
     if compare_mode == "Rata-rata Jakarta":
-        trend_df, x_col, x_title = period_trend(filtered_df, granularity)
+        trend_df, x_col, x_title = period_trend(filtered_df, granularity, focus_year)
         fig_trend = px.line(
             trend_df,
             x=x_col,
             y="rata_rata_ispu",
             markers=True,
-            title=f"Tren Rata-rata ISPU Jakarta ({granularity})",
+            title=f"Tren Rata-rata ISPU Jakarta ({granularity})" + (f" — Tahun {focus_year}" if focus_year is not None else ""),
             labels={x_col: x_title, "rata_rata_ispu": "Rata-rata ISPU"},
+            category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
         )
         fig_trend.update_traces(line=dict(width=3, color="#B45309"), marker=dict(size=7))
         y_hint = trend_df["rata_rata_ispu"].max()
     else:
-        trend_df, x_col = station_period_trend(filtered_df, granularity)
+        trend_df, x_col = station_period_trend(filtered_df, granularity, focus_year)
         fig_trend = px.line(
             trend_df,
             x=x_col,
             y="rata_rata_ispu",
             color="stasiun",
             markers=True,
-            title=f"Perbandingan Tren ISPU Antar Stasiun ({granularity})",
+            title=f"Perbandingan Tren ISPU Antar Stasiun ({granularity})" + (f" — Tahun {focus_year}" if focus_year is not None else ""),
             labels={x_col: granularity, "rata_rata_ispu": "Rata-rata ISPU", "stasiun": "Stasiun"},
+            category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
         )
         fig_trend.update_traces(line=dict(width=2.5), marker=dict(size=6))
         y_hint = trend_df["rata_rata_ispu"].max()
@@ -757,7 +808,7 @@ with tab2:
     fig_trend = add_ispu_threshold_lines(fig_trend, y_hint)
     st.plotly_chart(style_plotly(fig_trend, height=500), use_container_width=True)
 
-    trend_overall, overall_x_col, _ = period_trend(filtered_df, granularity)
+    trend_overall, overall_x_col, _ = period_trend(filtered_df, granularity, focus_year)
     trend_overall["perubahan_vs_periode_sebelumnya"] = trend_overall["rata_rata_ispu"].diff()
     significant_change = trend_overall.dropna(subset=["perubahan_vs_periode_sebelumnya"]).copy()
 
@@ -1127,14 +1178,33 @@ with tab4:
         )
 
     trend_granularity = st.radio("Granularitas tren pencemar kritis", ["Bulanan", "Tahunan"], horizontal=True)
+
+    critical_focus_year = None
     if trend_granularity == "Bulanan":
+        available_years_critical = sorted(filtered_df["tahun"].dropna().astype(int).unique().tolist())
+        default_critical_year_index = len(available_years_critical) - 1 if available_years_critical else 0
+        critical_focus_year = st.selectbox(
+            "Tahun fokus tren pencemar bulanan",
+            available_years_critical,
+            index=default_critical_year_index,
+            help=(
+                "Gunakan tahun fokus agar tren pencemar kritis bulanan dibaca sebagai pola Jan–Des dalam satu tahun, "
+                "bukan rangkaian bulan lintas tahun."
+            ),
+            key="critical_focus_year",
+        )
+        st.caption(
+            f"Mode bulanan aktif: tren pencemar kritis menampilkan Jan–Des tahun {critical_focus_year}."
+        )
+
+        critical_working = filtered_df[filtered_df["tahun"] == critical_focus_year].copy()
         critical_trend = (
-            filtered_df.groupby(["tahun_bulan", "critical_display"], as_index=False)
+            critical_working.groupby(["bulan", "bulan_abbr", "critical_display"], as_index=False)
             .size()
             .rename(columns={"size": "jumlah"})
-            .sort_values("tahun_bulan")
+            .sort_values("bulan")
         )
-        trend_x = "tahun_bulan"
+        trend_x = "bulan_abbr"
     else:
         critical_trend = (
             filtered_df.groupby(["tahun", "critical_display"], as_index=False)
@@ -1150,9 +1220,10 @@ with tab4:
         y="jumlah",
         color="critical_display",
         markers=True,
-        title=f"Tren Kemunculan Pencemar Kritis ({trend_granularity})",
-        labels={trend_x: "Periode", "jumlah": "Jumlah Kemunculan", "critical_display": "Pencemar"},
+        title=f"Tren Kemunculan Pencemar Kritis ({trend_granularity})" + (f" — Tahun {critical_focus_year}" if critical_focus_year is not None else ""),
+        labels={trend_x: "Bulan" if trend_x == "bulan_abbr" else "Periode", "jumlah": "Jumlah Kemunculan", "critical_display": "Pencemar"},
         color_discrete_map=CRITICAL_COLORS,
+        category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
     )
     fig_critical_trend.update_traces(line=dict(width=2.5))
     st.plotly_chart(style_plotly(fig_critical_trend, height=470), use_container_width=True)
