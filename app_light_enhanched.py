@@ -1,24 +1,25 @@
-import pandas as pd
-import numpy as np
-import streamlit as st
-import plotly.express as px
-import plotly.graph_objects as go
+
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
 
 # =============================================================================
-# KONFIGURASI HALAMAN
+# PAGE CONFIG
 # =============================================================================
 st.set_page_config(
-    page_title="BI Dashboard ISPU Jakarta",
-    page_icon="🌫️",
+    page_title="Dashboard ISPU Jakarta V5",
+    page_icon="🌤️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 
 # =============================================================================
-# STYLE / CUSTOM CSS - LIGHT EXECUTIVE MODE
+# CUSTOM CSS - EXECUTIVE LIGHT MODE
 # =============================================================================
 st.markdown(
     """
@@ -26,27 +27,23 @@ st.markdown(
         :root {
             --bg-main: #F6F1E8;
             --bg-soft: #FBF8F1;
-            --bg-panel: #FFFFFF;
-            --bg-panel-warm: #FFF7E8;
+            --panel: #FFFFFF;
             --text-main: #17212B;
             --text-muted: #64748B;
             --text-soft: #475569;
             --accent: #B45309;
-            --accent-2: #0F766E;
-            --accent-soft: rgba(180, 83, 9, 0.12);
-            --teal-soft: rgba(15, 118, 110, 0.10);
+            --teal: #0F766E;
+            --danger: #DC2626;
+            --success: #15803D;
             --line: rgba(23, 33, 43, 0.11);
             --shadow: 0 18px 50px rgba(28, 25, 23, 0.10);
             --shadow-soft: 0 10px 24px rgba(28, 25, 23, 0.08);
-            --good: #15803D;
-            --warn: #B45309;
-            --bad: #B91C1C;
         }
 
         html, body, .stApp {
             background:
-                radial-gradient(circle at top left, rgba(180, 83, 9, 0.14), transparent 26%),
-                radial-gradient(circle at top right, rgba(15, 118, 110, 0.11), transparent 24%),
+                radial-gradient(circle at top left, rgba(180, 83, 9, 0.12), transparent 26%),
+                radial-gradient(circle at top right, rgba(15, 118, 110, 0.10), transparent 24%),
                 linear-gradient(180deg, #F6F1E8 0%, #FBF8F1 42%, #F6F1E8 100%) !important;
             color: var(--text-main) !important;
         }
@@ -57,14 +54,7 @@ st.markdown(
             box-shadow: 8px 0 28px rgba(28, 25, 23, 0.06);
         }
 
-        [data-testid="stSidebar"] * {
-            color: var(--text-main);
-        }
-
-        [data-testid="stSidebar"] .stCaption,
-        [data-testid="stSidebar"] p {
-            color: var(--text-muted) !important;
-        }
+        [data-testid="stSidebar"] * { color: var(--text-main); }
 
         .block-container {
             padding-top: 1.25rem;
@@ -77,34 +67,17 @@ st.markdown(
             letter-spacing: -0.035em;
         }
 
-        p, span, label, div {
-            color: inherit;
-        }
-
         .hero {
             position: relative;
             overflow: hidden;
             padding: 1.45rem 1.55rem;
             border-radius: 28px;
             background:
-                linear-gradient(135deg, rgba(255,255,255,0.92), rgba(255, 247, 232, 0.92)),
+                linear-gradient(135deg, rgba(255,255,255,0.96), rgba(255,247,232,0.96)),
                 linear-gradient(90deg, rgba(180,83,9,0.18), rgba(15,118,110,0.12));
             border: 1px solid rgba(180, 83, 9, 0.18);
             box-shadow: var(--shadow);
             margin-bottom: 1.2rem;
-        }
-
-        .hero:before {
-            content: "";
-            position: absolute;
-            right: -90px;
-            top: -120px;
-            width: 310px;
-            height: 310px;
-            background: conic-gradient(from 120deg, rgba(180,83,9,0.22), rgba(15,118,110,0.16), rgba(180,83,9,0.08));
-            border-radius: 50%;
-            filter: blur(2px);
-            opacity: 0.9;
         }
 
         .hero:after {
@@ -126,7 +99,6 @@ st.markdown(
             line-height: 1.06;
             font-weight: 900;
             margin-bottom: 0.42rem;
-            color: var(--text-main);
         }
 
         .hero-subtitle {
@@ -134,7 +106,7 @@ st.markdown(
             z-index: 1;
             color: var(--text-soft);
             font-size: 0.98rem;
-            max-width: 980px;
+            max-width: 1120px;
             line-height: 1.55;
         }
 
@@ -154,19 +126,12 @@ st.markdown(
         }
 
         .metric-card {
-            background:
-                linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,247,232,0.84));
+            background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,247,232,0.84));
             border: 1px solid rgba(23, 33, 43, 0.10);
             border-radius: 24px;
             padding: 1.05rem 1.12rem;
             box-shadow: var(--shadow-soft);
             min-height: 145px;
-        }
-
-        .metric-card:hover {
-            transform: translateY(-1px);
-            transition: 160ms ease;
-            box-shadow: 0 16px 36px rgba(28, 25, 23, 0.12);
         }
 
         .metric-label {
@@ -193,20 +158,21 @@ st.markdown(
             line-height: 1.35;
         }
 
-        .section-card {
-            background: rgba(255,255,255,0.88);
+        .metric-severity {
+            display: inline-flex;
+            margin-top: 0.68rem;
+            padding: 0.28rem 0.58rem;
+            border-radius: 999px;
+            font-size: 0.74rem;
+            font-weight: 850;
+            letter-spacing: 0.02em;
             border: 1px solid rgba(23,33,43,0.10);
-            border-radius: 24px;
-            padding: 1rem 1.05rem;
-            box-shadow: var(--shadow-soft);
-            margin-bottom: 1rem;
+            background: rgba(255,255,255,0.82);
         }
 
         .insight-box {
             border-left: 6px solid var(--accent);
-            background:
-                linear-gradient(90deg, rgba(180, 83, 9, 0.13), rgba(255,255,255,0.92)),
-                #FFFFFF;
+            background: linear-gradient(90deg, rgba(180, 83, 9, 0.13), rgba(255,255,255,0.92)), #FFFFFF;
             border-radius: 20px;
             padding: 1rem 1.12rem;
             margin: 0.8rem 0 1rem 0;
@@ -230,19 +196,24 @@ st.markdown(
             line-height: 1.58;
         }
 
-        div[data-testid="stMetric"] {
-            background: #FFFFFF;
-            border: 1px solid rgba(23,33,43,0.10);
-            padding: 0.85rem 1rem;
-            border-radius: 18px;
-            box-shadow: var(--shadow-soft);
+        .threshold-note {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            align-items: center;
+            margin: 0.35rem 0 0.65rem 0;
+            color: #475569;
+            font-size: 0.83rem;
         }
 
-        div[data-testid="stDataFrame"] {
+        .threshold-pill {
+            display: inline-flex;
+            padding: 0.28rem 0.55rem;
+            border-radius: 999px;
+            background: #FFFFFF;
             border: 1px solid rgba(23,33,43,0.10);
-            border-radius: 16px;
-            box-shadow: var(--shadow-soft);
-            overflow: hidden;
+            box-shadow: 0 6px 14px rgba(28,25,23,0.06);
+            font-weight: 700;
         }
 
         .stTabs [data-baseweb="tab-list"] {
@@ -274,24 +245,11 @@ st.markdown(
             font-weight: 650;
         }
 
-        /* Input controls */
-        .stMultiSelect [data-baseweb="select"],
-        .stDateInput input,
-        .stRadio [role="radiogroup"] {
-            background-color: #FFFFFF !important;
-            border-radius: 14px !important;
-        }
-
-        button[kind="secondary"] {
-            border-radius: 14px !important;
-            border-color: rgba(180,83,9,0.25) !important;
-        }
-
-        hr {
-            border: none;
-            height: 1px;
-            background: rgba(23,33,43,0.10);
-            margin: 1rem 0;
+        div[data-testid="stDataFrame"] {
+            border: 1px solid rgba(23,33,43,0.10);
+            border-radius: 16px;
+            box-shadow: var(--shadow-soft);
+            overflow: hidden;
         }
     </style>
     """,
@@ -300,83 +258,62 @@ st.markdown(
 
 
 # =============================================================================
-# KONSTANTA
+# CONSTANTS
 # =============================================================================
-DATA_FILE = "ispu_jakarta_final_sot_v4_reviewed_eda_sama.csv"
+DATA_FILE = "D00_ispu_jakarta_final_sot_v5_drop_over50.csv"
 
-CATEGORY_ORDER = [
-    "BAIK",
-    "SEDANG",
-    "TIDAK SEHAT",
-    "SANGAT TIDAK SEHAT",
-    "BERBAHAYA",
-]
-
+CATEGORY_ORDER = ["BAIK", "SEDANG", "TIDAK SEHAT", "SANGAT TIDAK SEHAT", "BERBAHAYA"]
 CATEGORY_COLORS = {
-    "BAIK": "#22C55E",
-    "SEDANG": "#F59E0B",
-    "TIDAK SEHAT": "#EF4444",
-    "SANGAT TIDAK SEHAT": "#A855F7",
+    "BAIK": "#15803D",
+    "SEDANG": "#D97706",
+    "TIDAK SEHAT": "#DC2626",
+    "SANGAT TIDAK SEHAT": "#7C3AED",
     "BERBAHAYA": "#7F1D1D",
 }
-
 CRITICAL_COLORS = {
-    "PM10": "#F97316",
-    "PM25": "#EF4444",
-    "O3": "#8B5CF6",
-    "CO": "#14B8A6",
-    "SO2": "#EAB308",
-    "NO2": "#38BDF8",
+    "PM10": "#EA580C",
+    "SO2": "#CA8A04",
+    "CO": "#0F766E",
+    "O3": "#7C3AED",
+    "NO2": "#0284C7",
 }
-
-MONTH_MAP = {
+MONTH_ABBR = {
     1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "Mei", 6: "Jun",
     7: "Jul", 8: "Agu", 9: "Sep", 10: "Okt", 11: "Nov", 12: "Des",
 }
-
-PLOTLY_TEMPLATE = "plotly_white"
+BAIK_THRESHOLD = 50
+TIDAK_SEHAT_THRESHOLD = 100
 
 
 # =============================================================================
-# FUNGSI DATA
+# DATA
 # =============================================================================
-@st.cache_data(show_spinner="Memuat dataset ISPU Jakarta...")
-def load_data(path: str = DATA_FILE) -> pd.DataFrame:
-    """Load dataset final source of truth."""
+@st.cache_data(show_spinner="Memuat dataset final ISPU Jakarta V5...")
+def load_data(path: str = DATA_FILE):
     candidate_paths = [
         Path(path),
         Path(__file__).parent / path if "__file__" in globals() else Path(path),
         Path("/mnt/data") / path,
     ]
-
-    data_path = None
-    for p in candidate_paths:
-        if p.exists():
-            data_path = p
-            break
-
+    data_path = next((p for p in candidate_paths if p.exists()), None)
     if data_path is None:
-        raise FileNotFoundError(
-            f"File dataset '{path}' tidak ditemukan. "
-            "Pastikan CSV berada dalam folder yang sama dengan app.py."
-        )
+        raise FileNotFoundError(f"Dataset '{path}' tidak ditemukan. Letakkan CSV di folder yang sama dengan app.py.")
 
     df = pd.read_csv(data_path)
     df["tanggal"] = pd.to_datetime(df["tanggal"], errors="coerce")
-    df = df.dropna(subset=["tanggal", "stasiun", "max", "critical", "categori"]).copy()
+    pollutant_cols = [c for c in ["pm10", "pm25", "so2", "co", "o3", "no2"] if c in df.columns]
 
-    numeric_cols = ["pm10", "pm25", "so2", "co", "o3", "no2", "max"]
-    for col in numeric_cols:
+    for col in pollutant_cols + ["max"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    df = df.dropna(subset=["tanggal", "stasiun", "max", "critical", "categori"]).copy()
     df["tahun"] = df["tanggal"].dt.year
     df["bulan"] = df["tanggal"].dt.month
-    df["nama_bulan"] = df["bulan"].map(MONTH_MAP)
+    df["bulan_abbr"] = df["bulan"].map(MONTH_ABBR)
     df["tahun_bulan"] = df["tanggal"].dt.to_period("M").astype(str)
     df["stasiun_kode"] = df["stasiun"].str.extract(r"(DKI\d)", expand=False).fillna(df["stasiun"])
-    df["is_tidak_sehat_plus"] = df["categori"].isin(
-        ["TIDAK SEHAT", "SANGAT TIDAK SEHAT", "BERBAHAYA"]
-    )
+    df["critical_display"] = df["critical"]
+    df["is_tidak_sehat_plus"] = df["categori"].isin(["TIDAK SEHAT", "SANGAT TIDAK SEHAT", "BERBAHAYA"])
 
     def musim(bulan: int) -> str:
         if bulan in [11, 12, 1, 2, 3]:
@@ -388,59 +325,93 @@ def load_data(path: str = DATA_FILE) -> pd.DataFrame:
         return "Peralihan II"
 
     df["musim"] = df["bulan"].apply(musim)
-    df["critical_display"] = df["critical"].replace({"PM25": "PM2.5"})
-
-    return df
+    return df, pollutant_cols
 
 
-def apply_global_filters(df: pd.DataFrame, stations: list[str], date_range) -> pd.DataFrame:
-    filtered = df.copy()
-
+def apply_global_filters(df, stations, date_range):
+    out = df.copy()
     if stations:
-        filtered = filtered[filtered["stasiun"].isin(stations)]
-
+        out = out[out["stasiun"].isin(stations)]
     if len(date_range) == 2:
-        start_date = pd.to_datetime(date_range[0])
-        end_date = pd.to_datetime(date_range[1])
-        filtered = filtered[
-            (filtered["tanggal"] >= start_date)
-            & (filtered["tanggal"] <= end_date)
-        ]
-
-    return filtered.copy()
+        start, end = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+        out = out[(out["tanggal"] >= start) & (out["tanggal"] <= end)]
+    return out
 
 
-def format_pct(value: float) -> str:
-    if pd.isna(value):
-        return "-"
-    return f"{value:.1f}%"
-
-
-def safe_mode(series: pd.Series, default: str = "-") -> str:
+# =============================================================================
+# UI HELPERS
+# =============================================================================
+def safe_mode(series, default="-"):
     s = series.dropna()
     if s.empty:
         return default
     return str(s.mode().iloc[0])
 
 
-def metric_card(label: str, value: str, note: str = "") -> None:
+def format_pct(value):
+    return "-" if pd.isna(value) else f"{value:.1f}%"
+
+
+def metric_card(label, value, note="", value_color="#17212B", severity_label=None, severity_color=None):
+    severity_html = ""
+    if severity_label:
+        pill_color = severity_color or value_color
+        severity_html = (
+            f'<div class="metric-severity" '
+            f'style="color:{pill_color}; border-color:{pill_color}55; background:{pill_color}12;">'
+            f'{severity_label}</div>'
+        )
+
     st.markdown(
         f"""
         <div class="metric-card">
             <div class="metric-label">{label}</div>
-            <div class="metric-value">{value}</div>
+            <div class="metric-value" style="color:{value_color};">{value}</div>
             <div class="metric-note">{note}</div>
+            {severity_html}
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-def insight_box(title: str, body: str) -> None:
+def ispu_category_and_color(value):
+    """Warna KPI mengikuti kelas ISPU agar stakeholder cepat menangkap kegawatan."""
+    if pd.isna(value):
+        return "Tidak tersedia", "#64748B"
+    if value <= 50:
+        return "BAIK", "#15803D"
+    if value <= 100:
+        return "SEDANG", "#D97706"
+    if value <= 199:
+        return "TIDAK SEHAT", "#DC2626"
+    if value <= 299:
+        return "SANGAT TIDAK SEHAT", "#7C3AED"
+    return "BERBAHAYA", "#7F1D1D"
+
+
+def risk_rate_label_and_color(value):
+    """Warna KPI persentase risiko dibuat sederhana untuk kebutuhan komunikasi stakeholder."""
+    if pd.isna(value):
+        return "Tidak tersedia", "#64748B"
+    if value < 10:
+        return "RISIKO RENDAH", "#15803D"
+    if value < 20:
+        return "PERLU DIPANTAU", "#D97706"
+    if value < 35:
+        return "RISIKO TINGGI", "#DC2626"
+    return "RISIKO SANGAT TINGGI", "#7C3AED"
+
+
+def pollutant_color(pollutant):
+    return CRITICAL_COLORS.get(str(pollutant).upper(), "#334155")
+
+
+def insight_box(title, body, icon="💡"):
     st.markdown(
         f"""
         <div class="insight-box">
-            <div class="insight-title">💡 {title}</div>
+            <div class="insight-title">{icon} {title}</div>
             <div class="insight-text">{body}</div>
         </div>
         """,
@@ -448,47 +419,133 @@ def insight_box(title: str, body: str) -> None:
     )
 
 
-def empty_state() -> None:
-    st.warning("Tidak ada data pada kombinasi filter yang dipilih. Ubah stasiun atau rentang waktu di sidebar.")
+def threshold_note():
+    st.markdown(
+        """
+        <div class="threshold-note">
+            <span class="threshold-pill">Garis hijau: ISPU 50 = batas kategori BAIK</span>
+            <span class="threshold-pill">Garis merah: ISPU 100 = mulai Tidak Sehat+</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
-def style_plotly(fig: go.Figure, height: int = 430) -> go.Figure:
+def category_legend_note():
+    st.markdown(
+        """
+        <div class="threshold-note">
+            <span class="threshold-pill">BAIK: 0–50</span>
+            <span class="threshold-pill">SEDANG: 51–100</span>
+            <span class="threshold-pill">TIDAK SEHAT+: >100</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def critical_legend_note(pollutant_cols):
+    pollutant_text = ", ".join([c.upper() for c in pollutant_cols])
+    st.markdown(
+        f"""
+        <div class="threshold-note">
+            <span class="threshold-pill">Pencemar kritis = parameter dengan nilai ISPU tertinggi pada baris yang sama</span>
+            <span class="threshold-pill">Polutan aktif V5: {pollutant_text}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def season_mapping_note():
+    st.markdown(
+        """
+        <div class="threshold-note">
+            <span class="threshold-pill">Musim Hujan: Nov, Des, Jan, Feb, Mar</span>
+            <span class="threshold-pill">Peralihan I: Apr, Mei</span>
+            <span class="threshold-pill">Musim Kemarau: Jun, Jul, Agu, Sep</span>
+            <span class="threshold-pill">Peralihan II: Okt</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def style_plotly(fig, height=430):
     fig.update_layout(
-        template=PLOTLY_TEMPLATE,
+        template="plotly_white",
         height=height,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#FFFFFF",
         font=dict(color="#17212B", family="Inter, Segoe UI, Arial"),
         title=dict(font=dict(size=18, color="#17212B"), x=0.02),
         margin=dict(l=35, r=25, t=65, b=35),
-        legend=dict(
-            bgcolor="rgba(255,255,255,0)",
-            bordercolor="rgba(23,33,43,0)",
-            font=dict(size=11, color="#334155"),
-        ),
+        legend=dict(bgcolor="rgba(255,255,255,0)", font=dict(size=11, color="#334155")),
     )
-    fig.update_xaxes(
-        gridcolor="rgba(23,33,43,0.08)",
-        zerolinecolor="rgba(23,33,43,0.12)",
-        linecolor="rgba(23,33,43,0.18)",
-        tickfont=dict(color="#475569"),
-        title_font=dict(color="#334155"),
+    fig.update_xaxes(gridcolor="rgba(23,33,43,0.08)", linecolor="rgba(23,33,43,0.18)")
+    fig.update_yaxes(gridcolor="rgba(23,33,43,0.08)", linecolor="rgba(23,33,43,0.18)")
+    return fig
+
+
+def add_ispu_threshold_lines(fig, y_max_hint=None):
+    fig.add_hline(
+        y=BAIK_THRESHOLD,
+        line_dash="dot",
+        line_color="#15803D",
+        line_width=2,
+        annotation_text="Batas BAIK (50)",
+        annotation_position="top left",
+        annotation_font=dict(color="#15803D", size=11),
     )
-    fig.update_yaxes(
-        gridcolor="rgba(23,33,43,0.08)",
-        zerolinecolor="rgba(23,33,43,0.12)",
-        linecolor="rgba(23,33,43,0.18)",
-        tickfont=dict(color="#475569"),
-        title_font=dict(color="#334155"),
+    fig.add_hline(
+        y=TIDAK_SEHAT_THRESHOLD,
+        line_dash="dash",
+        line_color="#DC2626",
+        line_width=2.5,
+        annotation_text="Mulai Tidak Sehat+ (100)",
+        annotation_position="top left",
+        annotation_font=dict(color="#DC2626", size=11),
+    )
+    if y_max_hint is not None:
+        fig.update_yaxes(range=[0, max(120, y_max_hint * 1.15)])
+    return fig
+
+
+def add_unhealthy_rate_reference(fig, target=20):
+    """Adds a reference line for risk proportion charts."""
+    fig.add_hline(
+        y=target,
+        line_dash="dot",
+        line_color="#DC2626",
+        line_width=2,
+        annotation_text=f"Referensi risiko {target}%",
+        annotation_position="top left",
+        annotation_font=dict(color="#DC2626", size=11),
     )
     return fig
+
+
+def period_trend(df, granularity):
+    if granularity == "Harian":
+        return df.groupby("tanggal", as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tanggal"), "tanggal", "Tanggal"
+    if granularity == "Bulanan":
+        return df.groupby("tahun_bulan", as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun_bulan"), "tahun_bulan", "Bulan"
+    return df.groupby("tahun", as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun"), "tahun", "Tahun"
+
+
+def station_period_trend(df, granularity):
+    if granularity == "Harian":
+        return df.groupby(["tanggal", "stasiun"], as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tanggal"), "tanggal"
+    if granularity == "Bulanan":
+        return df.groupby(["tahun_bulan", "stasiun"], as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun_bulan"), "tahun_bulan"
+    return df.groupby(["tahun", "stasiun"], as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun"), "tahun"
 
 
 # =============================================================================
 # LOAD DATA
 # =============================================================================
 try:
-    df = load_data(DATA_FILE)
+    df, pollutant_cols = load_data(DATA_FILE)
 except Exception as exc:
     st.error(str(exc))
     st.stop()
@@ -502,11 +559,11 @@ st.markdown(
     <div class="hero">
         <div class="hero-title">Executive BI Dashboard Kualitas Udara Jakarta</div>
         <div class="hero-subtitle">
-            Dashboard interaktif berbasis dataset final ISPU Jakarta dengan prinsip
-            <b>single source of truth</b>. Seluruh tab menggunakan sumber data yang sama,
-            sehingga KPI, tren, kategori, dan pencemar kritis tetap sinkron.
+            Dashboard V5 untuk analisis ISPU Jakarta. Dashboard ini sudah mengikuti feedback asesor dan menambahkan mode chart kategori:
+            kolom dengan missing value lebih dari 50% tidak diimputasi, sehingga PM2.5 di-drop dari source of truth.
+            Visualisasi ditingkatkan agar tidak hanya menampilkan data, tetapi juga informasi melalui garis ambang ISPU.
         </div>
-        <span class="source-pill">Source of truth: ispu_jakarta_final_sot_v4_reviewed_eda_sama.csv</span>
+        <span class="source-pill">Source of truth: D00_ispu_jakarta_final_sot_v5_drop_over50.csv</span>
     </div>
     """,
     unsafe_allow_html=True,
@@ -514,51 +571,40 @@ st.markdown(
 
 
 # =============================================================================
-# SIDEBAR FILTER GLOBAL
+# SIDEBAR
 # =============================================================================
 with st.sidebar:
     st.markdown("## Filter Global")
-
     all_stations = sorted(df["stasiun"].dropna().unique())
-    selected_stations = st.multiselect(
-        "Stasiun SPKU",
-        options=all_stations,
-        default=all_stations,
-        help="Filter ini memengaruhi seluruh tab dashboard.",
-    )
-
-    min_date = df["tanggal"].min().date()
-    max_date = df["tanggal"].max().date()
+    selected_stations = st.multiselect("Stasiun SPKU", all_stations, default=all_stations)
     selected_date_range = st.date_input(
         "Rentang Waktu",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date,
-        help="Filter tanggal global untuk seluruh visualisasi.",
+        value=(df["tanggal"].min().date(), df["tanggal"].max().date()),
+        min_value=df["tanggal"].min().date(),
+        max_value=df["tanggal"].max().date(),
     )
 
     st.markdown("---")
-    st.markdown("### Catatan Data")
-    st.caption(
-        "Unit observasi final: 1 tanggal × 1 stasiun. "
-        "Kolom max, critical, dan categori dihitung dari nilai polutan pada baris final yang sama."
-    )
+    st.markdown("### Catatan Dataset V5")
+    st.caption("PM2.5 di-drop karena missing value >50%.")
+    st.caption(f"Polutan aktif final: {', '.join([c.upper() for c in pollutant_cols])}.")
+    st.caption("Ambang informasi: ISPU 50 = batas BAIK; ISPU 100 = mulai Tidak Sehat+.")
 
 filtered_df = apply_global_filters(df, selected_stations, selected_date_range)
 
 if filtered_df.empty:
-    empty_state()
+    st.warning("Tidak ada data pada kombinasi filter yang dipilih.")
     st.stop()
 
 
 # =============================================================================
-# RINGKASAN FILTER
+# FILTER SUMMARY
 # =============================================================================
-left, mid, right = st.columns([1.2, 1.2, 1.6])
+left, mid, right = st.columns([1.1, 1.1, 1.8])
 with left:
     st.markdown(f'<div class="small-muted">Observasi terfilter</div><h3>{len(filtered_df):,}</h3>', unsafe_allow_html=True)
 with mid:
-    st.markdown(f'<div class="small-muted">Stasiun aktif</div><h3>{filtered_df["stasiun"].nunique()}</h3>', unsafe_allow_html=True)
+    st.markdown(f'<div class="small-muted">SPKU aktif</div><h3>{filtered_df["stasiun"].nunique()}</h3>', unsafe_allow_html=True)
 with right:
     st.markdown(
         f'<div class="small-muted">Periode aktif</div><h3>{filtered_df["tanggal"].min().date()} s.d. {filtered_df["tanggal"].max().date()}</h3>',
@@ -569,53 +615,63 @@ with right:
 # =============================================================================
 # TABS
 # =============================================================================
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    [
-        "1. Overview Kualitas Udara",
-        "2. Tren Temporal",
-        "3. Antar Stasiun",
-        "4. Pencemar Kritis",
-        "5. Pola Musiman",
-    ]
-)
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "1. Overview Kualitas Udara",
+    "2. Tren Temporal",
+    "3. Antar Stasiun",
+    "4. Pencemar Kritis",
+    "5. Pola Musiman",
+])
 
 
 # =============================================================================
-# TAB 1: OVERVIEW
+# TAB 1 — OVERVIEW
 # =============================================================================
 with tab1:
-    st.subheader("Overview Kualitas Udara Jakarta")
+    st.subheader("Dashboard 1 — Overview Kualitas Udara Jakarta")
+    st.caption("Membaca kondisi umum kualitas udara berdasarkan KPI utama, risiko Tidak Sehat+, dan ringkasan stasiun. Warna angka KPI mengikuti kelas/kegawatan agar informasi cepat terbaca.")
 
     avg_ispu = filtered_df["max"].mean()
     pct_unhealthy = filtered_df["is_tidak_sehat_plus"].mean() * 100
     dominant_pollutant = safe_mode(filtered_df["critical_display"])
-    dominant_share = (
-        filtered_df["critical_display"].value_counts(normalize=True).max() * 100
-        if not filtered_df.empty
-        else np.nan
-    )
+    dominant_share = filtered_df["critical_display"].value_counts(normalize=True).max() * 100
+
+    category_legend_note()
+    critical_legend_note(pollutant_cols)
+
+    avg_category, avg_color = ispu_category_and_color(avg_ispu)
+    risk_label, risk_color = risk_rate_label_and_color(pct_unhealthy)
+    dominant_color = pollutant_color(dominant_pollutant)
 
     c1, c2, c3 = st.columns(3)
     with c1:
         metric_card(
             "Rata-rata ISPU Harian",
             f"{avg_ispu:.1f}",
-            "Rerata nilai max pada data terfilter",
+            "Rerata kolom max pada data terfilter",
+            value_color=avg_color,
+            severity_label=f"Kelas: {avg_category}",
+            severity_color=avg_color,
         )
     with c2:
         metric_card(
-            "Hari Tidak Sehat+",
+            "Observasi Tidak Sehat+",
             format_pct(pct_unhealthy),
             "TIDAK SEHAT, SANGAT TIDAK SEHAT, atau BERBAHAYA",
+            value_color=risk_color,
+            severity_label=risk_label,
+            severity_color=risk_color,
         )
     with c3:
         metric_card(
             "Pencemar Dominan",
             dominant_pollutant,
-            f"Muncul pada {dominant_share:.1f}% observasi" if pd.notna(dominant_share) else "-",
+            f"Muncul pada {dominant_share:.1f}% observasi",
+            value_color=dominant_color,
+            severity_label="Pencemar paling sering menjadi critical",
+            severity_color=dominant_color,
         )
 
-    st.markdown("### Ringkasan Metrik per Stasiun")
     station_summary = (
         filtered_df.groupby("stasiun", as_index=False)
         .agg(
@@ -623,195 +679,313 @@ with tab1:
             median_ispu=("max", "median"),
             max_tertinggi=("max", "max"),
             persen_tidak_sehat_plus=("is_tidak_sehat_plus", lambda x: x.mean() * 100),
-            pencemar_dominan=("critical_display", lambda x: safe_mode(x)),
+            pencemar_dominan=("critical_display", safe_mode),
             jumlah_observasi=("max", "size"),
         )
         .sort_values("rata_rata_ispu", ascending=False)
     )
 
-    station_summary_display = station_summary.copy()
-    for col in ["rata_rata_ispu", "median_ispu", "max_tertinggi", "persen_tidak_sehat_plus"]:
-        station_summary_display[col] = station_summary_display[col].round(2)
+    st.markdown("#### Ringkasan Metrik per Stasiun")
+    st.dataframe(station_summary.round(2), use_container_width=True, hide_index=True)
 
-    st.dataframe(
-        station_summary_display,
-        use_container_width=True,
-        hide_index=True,
+    threshold_note()
+    fig_station_avg = px.bar(
+        station_summary,
+        x="stasiun",
+        y="rata_rata_ispu",
+        title="Rata-rata ISPU per Stasiun dengan Ambang Kategori",
+        text=station_summary["rata_rata_ispu"].round(1),
+        labels={"rata_rata_ispu": "Rata-rata ISPU", "stasiun": "Stasiun"},
     )
+    fig_station_avg.update_traces(marker_color="#B45309", textposition="outside")
+    fig_station_avg = add_ispu_threshold_lines(fig_station_avg, station_summary["rata_rata_ispu"].max())
+    st.plotly_chart(style_plotly(fig_station_avg, height=430), use_container_width=True)
 
     worst_station = station_summary.iloc[0]["stasiun"]
     best_station = station_summary.iloc[-1]["stasiun"]
-
     insight_box(
-        "Interpretasi kondisi keseluruhan",
+        "Analisis & insight overview",
         (
-            f"Pada periode dan stasiun yang dipilih, rata-rata ISPU berada di angka "
-            f"<b>{avg_ispu:.1f}</b> dengan proporsi observasi kategori Tidak Sehat atau lebih buruk "
-            f"sebesar <b>{pct_unhealthy:.1f}%</b>. Pencemar yang paling dominan adalah "
-            f"<b>{dominant_pollutant}</b>. Untuk kebijakan lingkungan, perhatian utama perlu diarahkan "
-            f"pada stasiun dengan rata-rata ISPU tertinggi, yaitu <b>{worst_station}</b>, sambil menjaga "
-            f"praktik pemantauan pada stasiun yang relatif lebih baik seperti <b>{best_station}</b>."
+            f"Rata-rata ISPU pada filter aktif adalah <b>{avg_ispu:.1f}</b>. "
+            f"Nilai ini perlu dibaca terhadap ambang 50 dan 100. Di atas 50, kondisi tidak lagi berada pada kategori BAIK; "
+            f"di atas 100, observasi mulai masuk Tidak Sehat+. Proporsi Tidak Sehat+ adalah "
+            f"<b>{pct_unhealthy:.1f}%</b>, dengan pencemar dominan <b>{dominant_pollutant}</b>. "
+            f"Prioritas perhatian diarahkan ke <b>{worst_station}</b>, sedangkan <b>{best_station}</b> menjadi pembanding performa relatif terbaik."
         ),
+        icon="✅",
     )
 
 
 # =============================================================================
-# TAB 2: TREN TEMPORAL
+# TAB 2 — TEMPORAL
 # =============================================================================
 with tab2:
-    st.subheader("Tren Temporal Kualitas Udara")
+    st.subheader("Dashboard 2 — Tren Temporal Kualitas Udara")
+    st.caption("Membaca arah perubahan kualitas udara dari waktu ke waktu dengan garis ambang interpretasi ISPU.")
 
-    granularity = st.radio(
-        "Pilih granularitas tren",
-        options=["Harian", "Bulanan", "Tahunan"],
-        horizontal=True,
-        index=1,
-    )
+    granularity = st.radio("Granularitas", ["Harian", "Bulanan", "Tahunan"], horizontal=True, index=1)
+    compare_mode = st.radio("Mode perbandingan", ["Rata-rata Jakarta", "Per Stasiun"], horizontal=True, index=1)
 
-    if granularity == "Harian":
-        trend_df = (
-            filtered_df.groupby("tanggal", as_index=False)
-            .agg(rata_rata_ispu=("max", "mean"))
-            .sort_values("tanggal")
+    threshold_note()
+
+    if compare_mode == "Rata-rata Jakarta":
+        trend_df, x_col, x_title = period_trend(filtered_df, granularity)
+        fig_trend = px.line(
+            trend_df,
+            x=x_col,
+            y="rata_rata_ispu",
+            markers=True,
+            title=f"Tren Rata-rata ISPU Jakarta ({granularity})",
+            labels={x_col: x_title, "rata_rata_ispu": "Rata-rata ISPU"},
         )
-        x_col = "tanggal"
-        x_title = "Tanggal"
-    elif granularity == "Bulanan":
-        trend_df = (
-            filtered_df.groupby("tahun_bulan", as_index=False)
-            .agg(rata_rata_ispu=("max", "mean"))
-            .sort_values("tahun_bulan")
-        )
-        x_col = "tahun_bulan"
-        x_title = "Bulan"
+        fig_trend.update_traces(line=dict(width=3, color="#B45309"), marker=dict(size=7))
+        y_hint = trend_df["rata_rata_ispu"].max()
     else:
-        trend_df = (
-            filtered_df.groupby("tahun", as_index=False)
-            .agg(rata_rata_ispu=("max", "mean"))
-            .sort_values("tahun")
+        trend_df, x_col = station_period_trend(filtered_df, granularity)
+        fig_trend = px.line(
+            trend_df,
+            x=x_col,
+            y="rata_rata_ispu",
+            color="stasiun",
+            markers=True,
+            title=f"Perbandingan Tren ISPU Antar Stasiun ({granularity})",
+            labels={x_col: granularity, "rata_rata_ispu": "Rata-rata ISPU", "stasiun": "Stasiun"},
         )
-        x_col = "tahun"
-        x_title = "Tahun"
+        fig_trend.update_traces(line=dict(width=2.5), marker=dict(size=6))
+        y_hint = trend_df["rata_rata_ispu"].max()
 
-    fig_trend = px.line(
-        trend_df,
-        x=x_col,
-        y="rata_rata_ispu",
-        markers=True,
-        title=f"Tren Nilai ISPU ({granularity})",
-        labels={"rata_rata_ispu": "Rata-rata ISPU", x_col: x_title},
-    )
-    fig_trend.update_traces(line=dict(width=3, color="#F59E0B"), marker=dict(size=7))
-    st.plotly_chart(style_plotly(fig_trend, height=470), use_container_width=True)
+    fig_trend = add_ispu_threshold_lines(fig_trend, y_hint)
+    st.plotly_chart(style_plotly(fig_trend, height=500), use_container_width=True)
 
-    first_value = trend_df["rata_rata_ispu"].iloc[0]
-    last_value = trend_df["rata_rata_ispu"].iloc[-1]
+    trend_overall, overall_x_col, _ = period_trend(filtered_df, granularity)
+    trend_overall["perubahan_vs_periode_sebelumnya"] = trend_overall["rata_rata_ispu"].diff()
+    significant_change = trend_overall.dropna(subset=["perubahan_vs_periode_sebelumnya"]).copy()
+
+    col_a, col_b = st.columns([1.05, 1])
+    with col_a:
+        if not significant_change.empty:
+            fig_change = px.bar(
+                significant_change,
+                x=overall_x_col,
+                y="perubahan_vs_periode_sebelumnya",
+                title="Perubahan ISPU vs Periode Sebelumnya",
+                labels={overall_x_col: "Periode", "perubahan_vs_periode_sebelumnya": "Perubahan ISPU"},
+            )
+            fig_change.update_traces(
+                marker_color=np.where(significant_change["perubahan_vs_periode_sebelumnya"] >= 0, "#DC2626", "#15803D")
+            )
+            st.plotly_chart(style_plotly(fig_change, height=360), use_container_width=True)
+
+    with col_b:
+        top_periods = trend_overall.nlargest(8, "rata_rata_ispu").copy()
+        top_periods["rata_rata_ispu"] = top_periods["rata_rata_ispu"].round(2)
+        st.markdown("#### Periode dengan ISPU Tertinggi")
+        st.dataframe(top_periods, use_container_width=True, hide_index=True)
+
+    first_value = trend_overall["rata_rata_ispu"].iloc[0]
+    last_value = trend_overall["rata_rata_ispu"].iloc[-1]
     change = last_value - first_value
-    change_pct = (change / first_value * 100) if first_value else 0
-
-    worst_period = trend_df.loc[trend_df["rata_rata_ispu"].idxmax()]
-    best_period = trend_df.loc[trend_df["rata_rata_ispu"].idxmin()]
-
     direction = "memburuk" if change > 0 else "membaik" if change < 0 else "relatif stabil"
-    attention_period = worst_period[x_col]
+    worst_period = trend_overall.loc[trend_overall["rata_rata_ispu"].idxmax()]
 
     insight_box(
-        "Tren temporal dan periode perhatian",
+        "Analisis & insight tren temporal",
         (
-            f"Dengan granularitas <b>{granularity.lower()}</b>, tren dari awal ke akhir periode terlihat "
-            f"<b>{direction}</b> dengan perubahan sekitar <b>{change:+.1f}</b> poin "
-            f"(<b>{change_pct:+.1f}%</b>). Periode dengan rata-rata ISPU tertinggi adalah "
-            f"<b>{attention_period}</b> dengan nilai <b>{worst_period['rata_rata_ispu']:.1f}</b>, "
-            f"sedangkan periode terbaik adalah <b>{best_period[x_col]}</b> dengan nilai "
-            f"<b>{best_period['rata_rata_ispu']:.1f}</b>. Periode puncak perlu menjadi sasaran evaluasi "
-            f"operasional, terutama untuk pengendalian sumber emisi dan kesiapan komunikasi risiko."
+            f"Tren pada granularitas <b>{granularity.lower()}</b> terlihat <b>{direction}</b> dari awal ke akhir periode "
+            f"dengan perubahan <b>{change:+.1f}</b> poin. Periode terburuk adalah <b>{worst_period[overall_x_col]}</b> "
+            f"({worst_period['rata_rata_ispu']:.1f}). Garis ambang 100 membantu mengidentifikasi periode ketika rata-rata ISPU "
+            f"mulai memasuki zona Tidak Sehat+."
         ),
+        icon="📈",
     )
 
 
 # =============================================================================
-# TAB 3: PERBANDINGAN ANTAR STASIUN
+# TAB 3 — STATION COMPARISON
 # =============================================================================
 with tab3:
-    st.subheader("Perbandingan Kualitas Udara Antar Stasiun")
+    st.subheader("Dashboard 3 — Perbandingan Kualitas Udara Antar Stasiun")
+    st.caption("Membandingkan beban kualitas udara antar SPKU dari distribusi kategori, rata-rata ISPU, dan persentase risiko.")
+    category_legend_note()
 
     category_station = (
         filtered_df.groupby(["stasiun", "categori"], as_index=False)
         .size()
         .rename(columns={"size": "jumlah"})
     )
-    category_station["categori"] = pd.Categorical(
-        category_station["categori"],
-        categories=CATEGORY_ORDER,
-        ordered=True,
-    )
+    category_station["categori"] = pd.Categorical(category_station["categori"], categories=CATEGORY_ORDER, ordered=True)
     category_station = category_station.sort_values(["stasiun", "categori"])
 
-    fig_cat_station = px.bar(
-        category_station,
-        x="stasiun",
-        y="jumlah",
-        color="categori",
-        title="Distribusi Kategori ISPU per Stasiun",
-        category_orders={"categori": CATEGORY_ORDER},
-        color_discrete_map=CATEGORY_COLORS,
-        labels={"jumlah": "Jumlah Observasi", "stasiun": "Stasiun", "categori": "Kategori"},
-    )
-    fig_cat_station.update_layout(barmode="stack")
-    st.plotly_chart(style_plotly(fig_cat_station, height=470), use_container_width=True)
-
-    avg_station = (
-        filtered_df.groupby("stasiun", as_index=False)
-        .agg(rata_rata_ispu=("max", "mean"))
-        .sort_values("rata_rata_ispu", ascending=False)
-    )
-    fig_avg_station = px.bar(
-        avg_station,
-        x="stasiun",
-        y="rata_rata_ispu",
-        title="Rata-rata Nilai ISPU per Stasiun",
-        labels={"rata_rata_ispu": "Rata-rata ISPU", "stasiun": "Stasiun"},
-        text=avg_station["rata_rata_ispu"].round(1),
-    )
-    fig_avg_station.update_traces(marker_color="#F59E0B", textposition="outside")
-    st.plotly_chart(style_plotly(fig_avg_station, height=430), use_container_width=True)
-
-    worst_station = avg_station.iloc[0]
-    best_station = avg_station.iloc[-1]
-
-    unhealthy_by_station = (
-        filtered_df.groupby("stasiun", as_index=False)
-        .agg(persen_tidak_sehat_plus=("is_tidak_sehat_plus", lambda x: x.mean() * 100))
-        .sort_values("persen_tidak_sehat_plus", ascending=False)
-    )
-    highest_risk_station = unhealthy_by_station.iloc[0]
-
-    insight_box(
-        "Prioritas spasial kebijakan",
-        (
-            f"Stasiun dengan rata-rata ISPU tertinggi adalah <b>{worst_station['stasiun']}</b> "
-            f"({worst_station['rata_rata_ispu']:.1f}), sedangkan yang relatif terbaik adalah "
-            f"<b>{best_station['stasiun']}</b> ({best_station['rata_rata_ispu']:.1f}). "
-            f"Dari sisi proporsi kategori Tidak Sehat atau lebih buruk, titik risiko tertinggi berada pada "
-            f"<b>{highest_risk_station['stasiun']}</b> "
-            f"({highest_risk_station['persen_tidak_sehat_plus']:.1f}%). Implikasinya, intervensi pengendalian "
-            f"polusi sebaiknya diprioritaskan pada stasiun berisiko tinggi melalui investigasi sumber emisi, "
-            f"penguatan pengawasan, dan kampanye pengurangan aktivitas penyumbang polutan pada periode puncak."
+    # Mode visualisasi ditambahkan agar chart bisa dibaca dari dua sudut:
+    # 1) jumlah absolut observasi, dan 2) komposisi/persentase kategori.
+    category_viz_mode = st.radio(
+        "Mode visualisasi kategori",
+        [
+            "Stacked jumlah observasi",
+            "Disandingkan antar kategori",
+            "Komposisi 100% per stasiun",
+        ],
+        horizontal=True,
+        help=(
+            "Stacked menunjukkan total jumlah observasi; Disandingkan memudahkan perbandingan kategori antar stasiun; "
+            "Komposisi 100% menormalkan setiap stasiun menjadi 100% agar proporsi kategorinya mudah dibandingkan."
         ),
     )
 
+    if category_viz_mode == "Komposisi 100% per stasiun":
+        category_station_plot = category_station.copy()
+        category_station_plot["total_stasiun"] = category_station_plot.groupby("stasiun")["jumlah"].transform("sum")
+        category_station_plot["persentase"] = (
+            category_station_plot["jumlah"] / category_station_plot["total_stasiun"] * 100
+        )
+
+        fig_cat_station = px.bar(
+            category_station_plot,
+            x="stasiun",
+            y="persentase",
+            color="categori",
+            title="Komposisi Kategori ISPU per Stasiun (100%)",
+            color_discrete_map=CATEGORY_COLORS,
+            category_orders={"categori": CATEGORY_ORDER},
+            labels={"persentase": "Komposisi (%)", "stasiun": "Stasiun", "categori": "Kategori"},
+            text=category_station_plot["persentase"].round(1).astype(str) + "%",
+            hover_data={"jumlah": True, "persentase": ":.2f", "total_stasiun": True},
+        )
+        fig_cat_station.update_layout(
+            barmode="stack",
+            yaxis=dict(range=[0, 100], ticksuffix="%"),
+        )
+        fig_cat_station.update_traces(textposition="inside", textfont_size=10)
+        fig_cat_station.add_hline(
+            y=20,
+            line_dash="dot",
+            line_color="#DC2626",
+            line_width=2,
+            annotation_text="Referensi komposisi 20%",
+            annotation_position="top left",
+            annotation_font=dict(color="#DC2626", size=11),
+        )
+
+    elif category_viz_mode == "Disandingkan antar kategori":
+        fig_cat_station = px.bar(
+            category_station,
+            x="stasiun",
+            y="jumlah",
+            color="categori",
+            title="Kategori ISPU per Stasiun — Mode Disandingkan",
+            color_discrete_map=CATEGORY_COLORS,
+            category_orders={"categori": CATEGORY_ORDER},
+            labels={"jumlah": "Jumlah Observasi", "stasiun": "Stasiun", "categori": "Kategori"},
+            text="jumlah",
+        )
+        fig_cat_station.update_layout(barmode="group")
+        fig_cat_station.update_traces(textposition="outside")
+
+    else:
+        fig_cat_station = px.bar(
+            category_station,
+            x="stasiun",
+            y="jumlah",
+            color="categori",
+            title="Distribusi Kategori ISPU per Stasiun — Stacked Jumlah Observasi",
+            color_discrete_map=CATEGORY_COLORS,
+            category_orders={"categori": CATEGORY_ORDER},
+            labels={"jumlah": "Jumlah Observasi", "stasiun": "Stasiun", "categori": "Kategori"},
+        )
+        fig_cat_station.update_layout(barmode="stack")
+
+    st.plotly_chart(style_plotly(fig_cat_station, height=500), use_container_width=True)
+
+    if category_viz_mode == "Komposisi 100% per stasiun":
+        insight_box(
+            "Cara membaca chart komposisi",
+            (
+                "Mode komposisi 100% menormalkan setiap stasiun menjadi total 100%. "
+                "Mode ini cocok untuk membandingkan proporsi kategori BAIK, SEDANG, dan Tidak Sehat+ antar stasiun, "
+                "walaupun jumlah observasi masing-masing stasiun berbeda."
+            ),
+            icon="🧭",
+        )
+    elif category_viz_mode == "Disandingkan antar kategori":
+        insight_box(
+            "Cara membaca chart disandingkan",
+            (
+                "Mode disandingkan cocok untuk melihat kategori mana yang paling membedakan antar stasiun. "
+                "Misalnya, kategori TIDAK SEHAT dapat dibandingkan langsung antar SPKU tanpa tertutup oleh total stacked."
+            ),
+            icon="🧭",
+        )
+
+    avg_station = (
+        filtered_df.groupby("stasiun", as_index=False)
+        .agg(
+            rata_rata_ispu=("max", "mean"),
+            median_ispu=("max", "median"),
+            persentase_tidak_sehat_plus=("is_tidak_sehat_plus", lambda x: x.mean() * 100),
+            jumlah_observasi=("max", "size"),
+        )
+        .sort_values("rata_rata_ispu", ascending=False)
+    )
+
+    col_avg, col_risk = st.columns([1, 1])
+    with col_avg:
+        threshold_note()
+        fig_avg_station = px.bar(
+            avg_station,
+            x="stasiun",
+            y="rata_rata_ispu",
+            title="Rata-rata Nilai ISPU per Stasiun",
+            labels={"rata_rata_ispu": "Rata-rata ISPU", "stasiun": "Stasiun"},
+            text=avg_station["rata_rata_ispu"].round(1),
+        )
+        fig_avg_station.update_traces(marker_color="#B45309", textposition="outside")
+        fig_avg_station = add_ispu_threshold_lines(fig_avg_station, avg_station["rata_rata_ispu"].max())
+        st.plotly_chart(style_plotly(fig_avg_station, height=430), use_container_width=True)
+
+    with col_risk:
+        fig_risk_station = px.bar(
+            avg_station.sort_values("persentase_tidak_sehat_plus", ascending=False),
+            x="stasiun",
+            y="persentase_tidak_sehat_plus",
+            title="Persentase Tidak Sehat+ per Stasiun",
+            labels={"persentase_tidak_sehat_plus": "% Tidak Sehat+", "stasiun": "Stasiun"},
+            text=avg_station.sort_values("persentase_tidak_sehat_plus", ascending=False)["persentase_tidak_sehat_plus"].round(1).astype(str) + "%",
+        )
+        fig_risk_station.update_traces(marker_color="#DC2626", textposition="outside")
+        fig_risk_station = add_unhealthy_rate_reference(fig_risk_station, target=20)
+        fig_risk_station.update_yaxes(range=[0, max(25, avg_station["persentase_tidak_sehat_plus"].max() * 1.25)])
+        st.plotly_chart(style_plotly(fig_risk_station, height=430), use_container_width=True)
+
+    st.markdown("#### Ringkasan Komparatif SPKU")
+    st.dataframe(avg_station.round(2), use_container_width=True, hide_index=True)
+
+    worst_avg = avg_station.iloc[0]
+    best_avg = avg_station.iloc[-1]
+    worst_risk = avg_station.sort_values("persentase_tidak_sehat_plus", ascending=False).iloc[0]
+
+    insight_box(
+        "Analisis & insight antar stasiun",
+        (
+            f"Stasiun dengan rata-rata ISPU tertinggi adalah <b>{worst_avg['stasiun']}</b> "
+            f"({worst_avg['rata_rata_ispu']:.1f}), sedangkan yang terendah adalah "
+            f"<b>{best_avg['stasiun']}</b> ({best_avg['rata_rata_ispu']:.1f}). "
+            f"Dari sisi proporsi risiko, <b>{worst_risk['stasiun']}</b> memiliki persentase Tidak Sehat+ tertinggi "
+            f"({worst_risk['persentase_tidak_sehat_plus']:.1f}%)."
+        ),
+        icon="📍",
+    )
+
 
 # =============================================================================
-# TAB 4: ANALISIS PARAMETER PENCEMAR KRITIS
+# TAB 4 — CRITICAL POLLUTANT
 # =============================================================================
 with tab4:
-    st.subheader("Analisis Parameter Pencemar Kritis")
+    st.subheader("Dashboard 4 — Analisis Parameter Pencemar Kritis")
+    st.caption("Membaca parameter yang paling sering menjadi pencemar dominan dari polutan aktif final.")
+    critical_legend_note(pollutant_cols)
 
-    critical_count = (
-        filtered_df["critical_display"]
-        .value_counts()
-        .reset_index()
-    )
+    critical_order = [c.upper() for c in pollutant_cols]
+    critical_count = filtered_df["critical_display"].value_counts().reindex(critical_order).dropna().reset_index()
     critical_count.columns = ["critical", "jumlah"]
     critical_count["persentase"] = critical_count["jumlah"] / critical_count["jumlah"].sum() * 100
 
@@ -823,150 +997,269 @@ with tab4:
             y="jumlah",
             title="Distribusi Pencemar Kritis",
             text=critical_count["persentase"].round(1).astype(str) + "%",
-            labels={"critical": "Parameter", "jumlah": "Jumlah Kemunculan"},
             color="critical",
-            color_discrete_map={k.replace("PM25", "PM2.5"): v for k, v in CRITICAL_COLORS.items()},
+            color_discrete_map=CRITICAL_COLORS,
+            labels={"critical": "Parameter", "jumlah": "Jumlah Kemunculan"},
         )
         fig_critical_bar.update_traces(textposition="outside")
-        st.plotly_chart(style_plotly(fig_critical_bar, height=430), use_container_width=True)
+        st.plotly_chart(style_plotly(fig_critical_bar, height=410), use_container_width=True)
 
     with col_b:
         fig_critical_pie = px.pie(
             critical_count,
             names="critical",
             values="jumlah",
-            title="Komposisi Pencemar Kritis",
+            title="Komposisi Parameter Pencemar Kritis",
             hole=0.55,
             color="critical",
-            color_discrete_map={k.replace("PM25", "PM2.5"): v for k, v in CRITICAL_COLORS.items()},
+            color_discrete_map=CRITICAL_COLORS,
         )
         fig_critical_pie.update_traces(textinfo="percent+label")
-        st.plotly_chart(style_plotly(fig_critical_pie, height=430), use_container_width=True)
-
-    critical_trend = (
-        filtered_df.groupby(["tahun_bulan", "critical_display"], as_index=False)
-        .size()
-        .rename(columns={"size": "jumlah"})
-        .sort_values("tahun_bulan")
-    )
-    fig_critical_trend = px.line(
-        critical_trend,
-        x="tahun_bulan",
-        y="jumlah",
-        color="critical_display",
-        markers=True,
-        title="Tren Kemunculan Pencemar Kritis dari Waktu ke Waktu",
-        labels={
-            "tahun_bulan": "Bulan",
-            "jumlah": "Jumlah Kemunculan",
-            "critical_display": "Pencemar",
-        },
-        color_discrete_map={k.replace("PM25", "PM2.5"): v for k, v in CRITICAL_COLORS.items()},
-    )
-    fig_critical_trend.update_traces(line=dict(width=2.5))
-    st.plotly_chart(style_plotly(fig_critical_trend, height=470), use_container_width=True)
+        st.plotly_chart(style_plotly(fig_critical_pie, height=410), use_container_width=True)
 
     critical_station = (
         filtered_df.groupby(["stasiun", "critical_display"], as_index=False)
         .size()
         .rename(columns={"size": "jumlah"})
     )
-    station_top_pollutant = (
-        critical_station.sort_values(["stasiun", "jumlah"], ascending=[True, False])
-        .groupby("stasiun")
-        .head(1)
+
+    critical_station["critical_display"] = pd.Categorical(
+        critical_station["critical_display"],
+        categories=[c.upper() for c in pollutant_cols],
+        ordered=True,
     )
+    critical_station = critical_station.sort_values(["stasiun", "critical_display"])
+
+    critical_viz_mode = st.radio(
+        "Mode visualisasi pencemar kritis antar stasiun",
+        [
+            "Stacked jumlah kemunculan",
+            "Disandingkan antar pencemar",
+            "Komposisi 100% per stasiun",
+        ],
+        horizontal=True,
+        help=(
+            "Stacked menunjukkan volume kemunculan pencemar kritis. "
+            "Disandingkan memudahkan perbandingan satu pencemar antar SPKU. "
+            "Komposisi 100% menunjukkan proporsi pencemar kritis di setiap stasiun."
+        ),
+    )
+
+    if critical_viz_mode == "Komposisi 100% per stasiun":
+        critical_station_plot = critical_station.copy()
+        critical_station_plot["total_stasiun"] = critical_station_plot.groupby("stasiun")["jumlah"].transform("sum")
+        critical_station_plot["persentase"] = (
+            critical_station_plot["jumlah"] / critical_station_plot["total_stasiun"] * 100
+        )
+
+        fig_crit_station = px.bar(
+            critical_station_plot,
+            x="stasiun",
+            y="persentase",
+            color="critical_display",
+            title="Komposisi Pencemar Kritis per Stasiun (100%)",
+            labels={"stasiun": "Stasiun", "persentase": "Komposisi (%)", "critical_display": "Pencemar"},
+            color_discrete_map=CRITICAL_COLORS,
+            text=critical_station_plot["persentase"].round(1).astype(str) + "%",
+            hover_data={"jumlah": True, "persentase": ":.2f", "total_stasiun": True},
+        )
+        fig_crit_station.update_layout(
+            barmode="stack",
+            yaxis=dict(range=[0, 100], ticksuffix="%"),
+        )
+        fig_crit_station.update_traces(textposition="inside", textfont_size=10)
+        fig_crit_station.add_hline(
+            y=50,
+            line_dash="dot",
+            line_color="#475569",
+            line_width=1.8,
+            annotation_text="Dominasi 50%",
+            annotation_position="top left",
+            annotation_font=dict(color="#475569", size=11),
+        )
+
+    elif critical_viz_mode == "Disandingkan antar pencemar":
+        fig_crit_station = px.bar(
+            critical_station,
+            x="stasiun",
+            y="jumlah",
+            color="critical_display",
+            title="Pencemar Kritis Antar Stasiun — Mode Disandingkan",
+            labels={"stasiun": "Stasiun", "jumlah": "Jumlah Kemunculan", "critical_display": "Pencemar"},
+            color_discrete_map=CRITICAL_COLORS,
+            text="jumlah",
+        )
+        fig_crit_station.update_layout(barmode="group")
+        fig_crit_station.update_traces(textposition="outside")
+
+    else:
+        fig_crit_station = px.bar(
+            critical_station,
+            x="stasiun",
+            y="jumlah",
+            color="critical_display",
+            title="Perbandingan Pencemar Kritis Antar Stasiun — Stacked Jumlah Kemunculan",
+            labels={"stasiun": "Stasiun", "jumlah": "Jumlah Kemunculan", "critical_display": "Pencemar"},
+            color_discrete_map=CRITICAL_COLORS,
+        )
+        fig_crit_station.update_layout(barmode="stack")
+
+    st.plotly_chart(style_plotly(fig_crit_station, height=455), use_container_width=True)
+
+    if critical_viz_mode == "Komposisi 100% per stasiun":
+        insight_box(
+            "Cara membaca komposisi pencemar kritis",
+            (
+                "Mode komposisi 100% menormalkan total kemunculan setiap stasiun menjadi 100%. "
+                "Mode ini membantu stakeholder melihat pencemar mana yang paling dominan secara proporsional pada masing-masing SPKU, "
+                "tanpa bias dari perbedaan jumlah observasi antar stasiun."
+            ),
+            icon="🧭",
+        )
+    elif critical_viz_mode == "Disandingkan antar pencemar":
+        insight_box(
+            "Cara membaca mode disandingkan",
+            (
+                "Mode disandingkan memudahkan pembandingan satu parameter pencemar antar SPKU. "
+                "Gunakan mode ini untuk melihat apakah O3, PM10, CO, SO2, atau NO2 lebih sering menjadi pencemar kritis di lokasi tertentu."
+            ),
+            icon="🧭",
+        )
+
+    trend_granularity = st.radio("Granularitas tren pencemar kritis", ["Bulanan", "Tahunan"], horizontal=True)
+    if trend_granularity == "Bulanan":
+        critical_trend = (
+            filtered_df.groupby(["tahun_bulan", "critical_display"], as_index=False)
+            .size()
+            .rename(columns={"size": "jumlah"})
+            .sort_values("tahun_bulan")
+        )
+        trend_x = "tahun_bulan"
+    else:
+        critical_trend = (
+            filtered_df.groupby(["tahun", "critical_display"], as_index=False)
+            .size()
+            .rename(columns={"size": "jumlah"})
+            .sort_values("tahun")
+        )
+        trend_x = "tahun"
+
+    fig_critical_trend = px.line(
+        critical_trend,
+        x=trend_x,
+        y="jumlah",
+        color="critical_display",
+        markers=True,
+        title=f"Tren Kemunculan Pencemar Kritis ({trend_granularity})",
+        labels={trend_x: "Periode", "jumlah": "Jumlah Kemunculan", "critical_display": "Pencemar"},
+        color_discrete_map=CRITICAL_COLORS,
+    )
+    fig_critical_trend.update_traces(line=dict(width=2.5))
+    st.plotly_chart(style_plotly(fig_critical_trend, height=470), use_container_width=True)
 
     dominant_pollutant = critical_count.iloc[0]["critical"]
     dominant_pct = critical_count.iloc[0]["persentase"]
 
-    station_pattern = "; ".join(
-        [
-            f"{row['stasiun']}: {row['critical_display']}"
-            for _, row in station_top_pollutant.iterrows()
-        ]
-    )
-
     insight_box(
-        "Karakteristik pencemar dominan",
+        "Analisis & insight pencemar kritis",
         (
-            f"Parameter yang paling dominan sebagai pencemar kritis adalah <b>{dominant_pollutant}</b> "
-            f"dengan proporsi <b>{dominant_pct:.1f}%</b> dari observasi terfilter. Pola dominan per stasiun adalah: "
-            f"<b>{station_pattern}</b>. Jika dominasi pencemar berbeda antar stasiun, maka program pengurangan emisi "
-            f"perlu disesuaikan dengan karakteristik lokal, misalnya pengendalian debu/partikulat untuk PM, "
-            f"pengelolaan emisi transportasi, serta evaluasi sumber ozon prekursor pada periode tertentu."
+            f"Parameter paling dominan sebagai pencemar kritis adalah <b>{dominant_pollutant}</b> "
+            f"dengan proporsi <b>{dominant_pct:.1f}%</b>. Karena PM2.5 di-drop pada V5, interpretasi pencemar kritis "
+            f"dibatasi pada polutan aktif final: <b>{', '.join([c.upper() for c in pollutant_cols])}</b>. "
+            f"Dashboard ini tidak lagi menyimpulkan dominasi PM2.5 sebagai hasil final."
         ),
+        icon="🏭",
     )
 
 
 # =============================================================================
-# TAB 5: POLA MUSIMAN
+# TAB 5 — SEASONAL
 # =============================================================================
 with tab5:
-    st.subheader("Pola Musiman Kualitas Udara")
+    st.subheader("Dashboard 5 — Pola Musiman Kualitas Udara")
+    st.caption("Mengidentifikasi bulan dan musim yang memiliki kualitas udara relatif lebih baik atau buruk.")
+    season_mapping_note()
+    category_legend_note()
 
     heatmap_df = (
-        filtered_df.groupby(["stasiun", "bulan"], as_index=False)
-        .agg(rata_rata_ispu=("max", "mean"))
-    )
-    heatmap_df["nama_bulan"] = heatmap_df["bulan"].map(MONTH_MAP)
-
-    fig_heatmap = px.density_heatmap(
-        heatmap_df,
-        x="nama_bulan",
-        y="stasiun",
-        z="rata_rata_ispu",
-        title="Heatmap Rata-rata ISPU berdasarkan Bulan dan Stasiun",
-        category_orders={"nama_bulan": list(MONTH_MAP.values())},
-        color_continuous_scale=[
-            [0.0, "#22C55E"],
-            [0.35, "#F59E0B"],
-            [0.70, "#EF4444"],
-            [1.0, "#7F1D1D"],
-        ],
-        labels={"nama_bulan": "Bulan", "stasiun": "Stasiun", "rata_rata_ispu": "Rata-rata ISPU"},
-    )
-    st.plotly_chart(style_plotly(fig_heatmap, height=520), use_container_width=True)
-
-    month_summary = (
-        filtered_df.groupby(["bulan", "nama_bulan"], as_index=False)
+        filtered_df.groupby(["stasiun", "bulan", "bulan_abbr"], as_index=False)
         .agg(rata_rata_ispu=("max", "mean"))
         .sort_values("bulan")
     )
-    fig_month = px.bar(
-        month_summary,
-        x="nama_bulan",
-        y="rata_rata_ispu",
-        title="Rata-rata ISPU per Bulan",
-        category_orders={"nama_bulan": list(MONTH_MAP.values())},
-        labels={"nama_bulan": "Bulan", "rata_rata_ispu": "Rata-rata ISPU"},
-        text=month_summary["rata_rata_ispu"].round(1),
-    )
-    fig_month.update_traces(marker_color="#F59E0B", textposition="outside")
-    st.plotly_chart(style_plotly(fig_month, height=400), use_container_width=True)
 
-    season_summary = (
-        filtered_df.groupby("musim", as_index=False)
-        .agg(rata_rata_ispu=("max", "mean"), jumlah_observasi=("max", "size"))
-        .sort_values("rata_rata_ispu", ascending=False)
+    fig_heatmap = px.density_heatmap(
+        heatmap_df,
+        x="bulan_abbr",
+        y="stasiun",
+        z="rata_rata_ispu",
+        title="Heatmap Rata-rata ISPU berdasarkan Bulan dan Stasiun",
+        category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
+        color_continuous_scale=[[0, "#15803D"], [0.35, "#D97706"], [0.7, "#DC2626"], [1, "#7F1D1D"]],
+        labels={"bulan_abbr": "Bulan", "stasiun": "Stasiun", "rata_rata_ispu": "Rata-rata ISPU"},
     )
+    fig_heatmap.add_annotation(
+        x=0.5,
+        y=-0.18,
+        xref="paper",
+        yref="paper",
+        text="Interpretasi warna: semakin merah berarti rata-rata ISPU semakin tinggi. Lihat chart bulanan/musiman untuk garis ambang 50 dan 100.",
+        showarrow=False,
+        font=dict(size=11, color="#475569"),
+    )
+    st.plotly_chart(style_plotly(fig_heatmap, height=520), use_container_width=True)
+
+    col_month, col_season = st.columns([1, 1])
+    with col_month:
+        threshold_note()
+        month_summary = (
+            filtered_df.groupby(["bulan", "bulan_abbr"], as_index=False)
+            .agg(rata_rata_ispu=("max", "mean"))
+            .sort_values("bulan")
+        )
+        fig_month = px.bar(
+            month_summary,
+            x="bulan_abbr",
+            y="rata_rata_ispu",
+            title="Rata-rata ISPU per Bulan",
+            category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
+            labels={"bulan_abbr": "Bulan", "rata_rata_ispu": "Rata-rata ISPU"},
+            text=month_summary["rata_rata_ispu"].round(1),
+        )
+        fig_month.update_traces(marker_color="#B45309", textposition="outside")
+        fig_month = add_ispu_threshold_lines(fig_month, month_summary["rata_rata_ispu"].max())
+        st.plotly_chart(style_plotly(fig_month, height=430), use_container_width=True)
+
+    with col_season:
+        threshold_note()
+        season_summary = (
+            filtered_df.groupby("musim", as_index=False)
+            .agg(rata_rata_ispu=("max", "mean"), jumlah_observasi=("max", "size"))
+            .sort_values("rata_rata_ispu", ascending=False)
+        )
+        fig_season = px.bar(
+            season_summary,
+            x="musim",
+            y="rata_rata_ispu",
+            title="Rata-rata ISPU per Musim",
+            labels={"musim": "Musim", "rata_rata_ispu": "Rata-rata ISPU"},
+            text=season_summary["rata_rata_ispu"].round(1),
+        )
+        fig_season.update_traces(marker_color="#0F766E", textposition="outside")
+        fig_season = add_ispu_threshold_lines(fig_season, season_summary["rata_rata_ispu"].max())
+        st.plotly_chart(style_plotly(fig_season, height=430), use_container_width=True)
 
     worst_month = month_summary.loc[month_summary["rata_rata_ispu"].idxmax()]
     best_month = month_summary.loc[month_summary["rata_rata_ispu"].idxmin()]
     worst_season = season_summary.iloc[0]
 
     insight_box(
-        "Pola musim dan rekomendasi operasional",
+        "Analisis & insight pola musiman",
         (
-            f"Bulan dengan rata-rata ISPU terburuk pada data terfilter adalah <b>{worst_month['nama_bulan']}</b> "
+            f"Bulan dengan rata-rata ISPU terburuk adalah <b>{worst_month['bulan_abbr']}</b> "
             f"({worst_month['rata_rata_ispu']:.1f}), sedangkan bulan terbaik adalah "
-            f"<b>{best_month['nama_bulan']}</b> ({best_month['rata_rata_ispu']:.1f}). "
-            f"Secara pengelompokan musim, periode dengan rata-rata ISPU tertinggi adalah "
-            f"<b>{worst_season['musim']}</b>. Untuk antisipasi operasional, Dinas dapat memperkuat pemantauan, "
-            f"komunikasi risiko, inspeksi sumber emisi, dan kebijakan pengurangan aktivitas penyumbang polusi "
-            f"menjelang bulan atau musim yang konsisten menunjukkan kualitas udara lebih buruk."
+            f"<b>{best_month['bulan_abbr']}</b> ({best_month['rata_rata_ispu']:.1f}). "
+            f"Musim terburuk adalah <b>{worst_season['musim']}</b>. Garis ambang memperjelas apakah rata-rata periode "
+            f"masih berada pada zona BAIK/SEDANG atau mendekati Tidak Sehat+."
         ),
+        icon="🗓️",
     )
-
-    st.markdown("### Ringkasan Musim")
-    st.dataframe(season_summary.round(2), use_container_width=True, hide_index=True)
