@@ -328,76 +328,61 @@ def load_data(path: str = DATA_FILE):
     return df, pollutant_cols
 
 
-def apply_global_filters(df, stations, date_range):
-    out = df.copy()
-    if stations:
-        out = out[out["stasiun"].isin(stations)]
-    if len(date_range) == 2:
-        start, end = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
-        out = out[(out["tanggal"] >= start) & (out["tanggal"] <= end)]
-    return out
+def month_start(year, month):
+    return pd.Timestamp(year=int(year), month=int(month), day=1)
 
 
-def year_scope_filter(df, scope_mode, single_year=None, year_range=None):
-    """Filter tambahan khusus untuk chart temporal/musiman agar bisa fokus ke 1 tahun atau rentang tahun."""
-    out = df.copy()
-
-    if scope_mode == "Tahun tunggal" and single_year is not None:
-        out = out[out["tahun"] == int(single_year)].copy()
-
-    elif scope_mode == "Rentang tahun" and year_range is not None:
-        start_year, end_year = int(year_range[0]), int(year_range[1])
-        out = out[(out["tahun"] >= start_year) & (out["tahun"] <= end_year)].copy()
-
-    return out
+def month_end(year, month):
+    return pd.Timestamp(year=int(year), month=int(month), day=1) + pd.offsets.MonthEnd(0)
 
 
-def period_scope_controls(df, key_prefix, default_mode="Tahun tunggal"):
-    """Komponen UI reusable untuk memilih cakupan periode pada grafik temporal/musiman."""
+def build_global_period_controls(df):
+    """Filter periode global berbasis dropdown tahun/bulan agar semua tab sinkron."""
+    min_date = df["tanggal"].min()
+    max_date = df["tanggal"].max()
+
     available_years = sorted(df["tahun"].dropna().astype(int).unique().tolist())
+    month_options = list(MONTH_ABBR.items())
+    month_label_to_num = {label: num for num, label in month_options}
+    month_labels = [label for _, label in month_options]
 
-    if not available_years:
-        return df.copy(), "Seluruh data terfilter", None, None, "Seluruh data terfilter"
-
-    mode_options = ["Seluruh data terfilter", "Tahun tunggal", "Rentang tahun"]
-    default_index = mode_options.index(default_mode) if default_mode in mode_options else 0
-
-    scope_mode = st.radio(
-        "Cakupan periode visualisasi",
-        mode_options,
-        horizontal=True,
-        index=default_index,
-        key=f"{key_prefix}_scope_mode",
+    st.markdown("### Filter Periode")
+    period_mode = st.radio(
+        "Mode periode",
+        ["Seluruh periode", "Tahun tunggal", "Rentang tahun", "Rentang bulan"],
+        horizontal=False,
+        index=0,
         help=(
-            "Gunakan Tahun tunggal untuk monitoring Jan–Des dalam satu tahun. "
-            "Gunakan Rentang tahun untuk melihat rata-rata pada beberapa tahun tertentu."
+            "Filter periode ini berlaku global untuk seluruh dashboard. "
+            "Gunakan Rentang bulan jika ingin memilih bulan dan tahun secara presisi."
         ),
     )
 
-    single_year = None
-    year_range = None
+    start_date = min_date
+    end_date = max_date
+    period_label = f"{min_date.date()} s.d. {max_date.date()}"
 
-    if scope_mode == "Tahun tunggal":
-        single_year = st.selectbox(
-            "Tahun fokus",
+    if period_mode == "Tahun tunggal":
+        selected_year = st.selectbox(
+            "Tahun",
             available_years,
             index=len(available_years) - 1,
-            key=f"{key_prefix}_single_year",
-            help="Visualisasi hanya menggunakan data pada tahun yang dipilih.",
+            key="global_single_year",
         )
-        scoped_df = year_scope_filter(df, scope_mode, single_year=single_year)
-        scope_label = f"Tahun {single_year}"
+        start_date = pd.Timestamp(year=int(selected_year), month=1, day=1)
+        end_date = pd.Timestamp(year=int(selected_year), month=12, day=31)
+        start_date = max(start_date, min_date)
+        end_date = min(end_date, max_date)
+        period_label = f"Tahun {selected_year}"
 
-    elif scope_mode == "Rentang tahun":
+    elif period_mode == "Rentang tahun":
         col_start, col_end = st.columns(2)
-
         with col_start:
             start_year = st.selectbox(
                 "Tahun awal",
                 available_years,
                 index=0,
-                key=f"{key_prefix}_start_year",
-                help="Pilih tahun awal untuk cakupan visualisasi.",
+                key="global_start_year",
             )
 
         end_year_options = [year for year in available_years if year >= int(start_year)]
@@ -406,24 +391,75 @@ def period_scope_controls(df, key_prefix, default_mode="Tahun tunggal"):
                 "Tahun akhir",
                 end_year_options,
                 index=len(end_year_options) - 1,
-                key=f"{key_prefix}_end_year",
-                help="Pilih tahun akhir. Pilihan otomatis dibatasi agar tidak lebih kecil dari tahun awal.",
+                key="global_end_year",
             )
 
-        year_range = (int(start_year), int(end_year))
-        scoped_df = year_scope_filter(df, scope_mode, year_range=year_range)
-        scope_label = f"Tahun {year_range[0]}–{year_range[1]}"
+        start_date = pd.Timestamp(year=int(start_year), month=1, day=1)
+        end_date = pd.Timestamp(year=int(end_year), month=12, day=31)
+        start_date = max(start_date, min_date)
+        end_date = min(end_date, max_date)
+        period_label = f"Tahun {start_year}–{end_year}"
 
-    else:
-        scoped_df = df.copy()
-        scope_label = "Seluruh data terfilter"
+    elif period_mode == "Rentang bulan":
+        st.caption("Pilih bulan dan tahun awal–akhir. Filter ini lebih presisi daripada kalender date picker.")
 
-    if scoped_df.empty:
-        st.warning("Tidak ada data pada cakupan periode yang dipilih. Ubah tahun/rentang tahun atau filter global.")
-    else:
-        st.caption(f"Cakupan aktif untuk visualisasi ini: {scope_label}.")
+        col_y1, col_m1 = st.columns(2)
+        with col_y1:
+            start_year = st.selectbox(
+                "Tahun awal",
+                available_years,
+                index=0,
+                key="global_month_start_year",
+            )
+        with col_m1:
+            start_month_label = st.selectbox(
+                "Bulan awal",
+                month_labels,
+                index=0,
+                key="global_start_month",
+            )
 
-    return scoped_df, scope_mode, single_year, year_range, scope_label
+        valid_end_years = [year for year in available_years if year >= int(start_year)]
+        col_y2, col_m2 = st.columns(2)
+        with col_y2:
+            end_year = st.selectbox(
+                "Tahun akhir",
+                valid_end_years,
+                index=len(valid_end_years) - 1,
+                key="global_month_end_year",
+            )
+
+        start_month_num = month_label_to_num[start_month_label]
+        if int(end_year) == int(start_year):
+            valid_end_months = [label for num, label in month_options if num >= int(start_month_num)]
+        else:
+            valid_end_months = month_labels
+
+        with col_m2:
+            end_month_label = st.selectbox(
+                "Bulan akhir",
+                valid_end_months,
+                index=len(valid_end_months) - 1,
+                key="global_end_month",
+            )
+
+        end_month_num = month_label_to_num[end_month_label]
+        start_date = month_start(start_year, start_month_num)
+        end_date = month_end(end_year, end_month_num)
+
+        start_date = max(start_date, min_date)
+        end_date = min(end_date, max_date)
+        period_label = f"{start_month_label} {start_year} – {end_month_label} {end_year}"
+
+    return period_mode, pd.to_datetime(start_date), pd.to_datetime(end_date), period_label
+
+
+def apply_global_filters(df, stations, start_date, end_date):
+    out = df.copy()
+    if stations:
+        out = out[out["stasiun"].isin(stations)]
+    out = out[(out["tanggal"] >= pd.to_datetime(start_date)) & (out["tanggal"] <= pd.to_datetime(end_date))]
+    return out.copy()
 
 
 # =============================================================================
@@ -681,7 +717,7 @@ st.markdown(
         <div class="hero-subtitle">
             Dashboard analisis ISPU Jakarta ini sudah mengikuti feedback asesor dan menambahkan mode chart kategori:
             kolom dengan missing value lebih dari 50% tidak diimputasi, sehingga PM2.5 di-drop dari dataset hasil cleaning.
-            Visualisasi ditingkatkan agar tidak hanya menampilkan data, tetapi juga informasi melalui garis ambang ISPU.
+            Visualisasi ditingkatkan agar tidak hanya menampilkan data, tetapi juga informasi melalui garis ambang ISPU. Seluruh periode analisis dikendalikan melalui filter global di sidebar.
         </div>
         <span class="source-pill">Sumber dataset: D00_ispu_jakarta_final_sot_v5_drop_over50.csv</span>
     </div>
@@ -695,14 +731,16 @@ st.markdown(
 # =============================================================================
 with st.sidebar:
     st.markdown("## Filter Global")
+
     all_stations = sorted(df["stasiun"].dropna().unique())
-    selected_stations = st.multiselect("Stasiun SPKU", all_stations, default=all_stations)
-    selected_date_range = st.date_input(
-        "Rentang Waktu",
-        value=(df["tanggal"].min().date(), df["tanggal"].max().date()),
-        min_value=df["tanggal"].min().date(),
-        max_value=df["tanggal"].max().date(),
+    selected_stations = st.multiselect(
+        "Stasiun SPKU",
+        all_stations,
+        default=all_stations,
+        help="Filter stasiun ini berlaku untuk seluruh tab dashboard.",
     )
+
+    period_mode, global_start_date, global_end_date, global_period_label = build_global_period_controls(df)
 
     st.markdown("---")
     st.markdown("### Catatan Dataset")
@@ -710,7 +748,7 @@ with st.sidebar:
     st.caption(f"Polutan aktif: {', '.join([c.upper() for c in pollutant_cols])}.")
     st.caption("Ambang informasi: ISPU 50 = batas BAIK; ISPU 100 = mulai Tidak Sehat+.")
 
-filtered_df = apply_global_filters(df, selected_stations, selected_date_range)
+filtered_df = apply_global_filters(df, selected_stations, global_start_date, global_end_date)
 
 if filtered_df.empty:
     st.warning("Tidak ada data pada kombinasi filter yang dipilih.")
@@ -727,7 +765,7 @@ with mid:
     st.markdown(f'<div class="small-muted">SPKU aktif</div><h3>{filtered_df["stasiun"].nunique()}</h3>', unsafe_allow_html=True)
 with right:
     st.markdown(
-        f'<div class="small-muted">Periode aktif</div><h3>{filtered_df["tanggal"].min().date()} s.d. {filtered_df["tanggal"].max().date()}</h3>',
+        f'<div class="small-muted">Periode aktif</div><h3>{global_period_label}</h3>',
         unsafe_allow_html=True,
     )
 
@@ -846,11 +884,8 @@ with tab2:
     granularity = st.radio("Granularitas", ["Harian", "Bulanan", "Tahunan"], horizontal=True, index=1)
     compare_mode = st.radio("Mode perbandingan", ["Rata-rata Jakarta", "Per Stasiun"], horizontal=True, index=1)
 
-    temporal_df, temporal_scope_mode, temporal_single_year, temporal_year_range, temporal_scope_label = period_scope_controls(
-        filtered_df,
-        key_prefix="temporal",
-        default_mode="Tahun tunggal" if granularity == "Bulanan" else "Seluruh data terfilter",
-    )
+    temporal_df = filtered_df.copy()
+    temporal_scope_label = global_period_label
 
     monthly_x_mode = "Jan–Des"
     if granularity == "Bulanan":
@@ -861,19 +896,16 @@ with tab2:
             index=0,
             key="temporal_monthly_x_mode",
             help=(
-                "Jan–Des menampilkan rata-rata per bulan dalam tahun/rentang aktif. "
-                "Bulan lintas tahun menampilkan urutan YYYY-MM untuk melihat perubahan antar bulan secara kronologis."
+                "Jan–Des menampilkan rata-rata per bulan pada periode global aktif. "
+                "Bulan lintas tahun menampilkan urutan YYYY-MM secara kronologis."
             ),
         )
         st.caption(
-            "Mode Jan–Des cocok untuk melihat rata-rata bulanan dalam satu tahun atau rentang tahun. "
-            "Mode Bulan lintas tahun cocok untuk audit tren kronologis."
+            f"Periode global aktif: {global_period_label}. "
+            "Mode Jan–Des cocok untuk melihat rata-rata bulanan dalam periode tersebut."
         )
 
     threshold_note()
-
-    if temporal_df.empty:
-        st.stop()
 
     if compare_mode == "Rata-rata Jakarta":
         trend_df, x_col, x_title = period_trend(temporal_df, granularity, monthly_x_mode)
@@ -1277,11 +1309,8 @@ with tab4:
 
     trend_granularity = st.radio("Granularitas tren pencemar kritis", ["Bulanan", "Tahunan"], horizontal=True)
 
-    critical_scope_df, critical_scope_mode, critical_single_year, critical_year_range, critical_scope_label = period_scope_controls(
-        filtered_df,
-        key_prefix="critical",
-        default_mode="Tahun tunggal" if trend_granularity == "Bulanan" else "Seluruh data terfilter",
-    )
+    critical_scope_df = filtered_df.copy()
+    critical_scope_label = global_period_label
 
     critical_monthly_x_mode = "Jan–Des"
     if trend_granularity == "Bulanan":
@@ -1292,13 +1321,11 @@ with tab4:
             index=0,
             key="critical_monthly_x_mode",
             help=(
-                "Jan–Des menampilkan rata-rata/akumulasi per bulan dalam tahun/rentang aktif. "
+                "Jan–Des menampilkan akumulasi per bulan pada periode global aktif. "
                 "Bulan lintas tahun menampilkan urutan YYYY-MM secara kronologis."
             ),
         )
-
-    if critical_scope_df.empty:
-        st.stop()
+        st.caption(f"Periode global aktif: {global_period_label}.")
 
     if trend_granularity == "Bulanan":
         if critical_monthly_x_mode == "Jan–Des":
@@ -1364,18 +1391,12 @@ with tab5:
     season_mapping_note()
     category_legend_note()
 
-    seasonal_df, seasonal_scope_mode, seasonal_single_year, seasonal_year_range, seasonal_scope_label = period_scope_controls(
-        filtered_df,
-        key_prefix="seasonal",
-        default_mode="Tahun tunggal",
-    )
-
-    if seasonal_df.empty:
-        st.stop()
+    seasonal_df = filtered_df.copy()
+    seasonal_scope_label = global_period_label
 
     st.caption(
-        f"Seluruh visualisasi musiman di tab ini menggunakan cakupan: {seasonal_scope_label}. "
-        "Dengan demikian, stakeholder dapat melihat pola rata-rata dalam satu tahun atau rentang tahun tertentu."
+        f"Seluruh visualisasi musiman di tab ini menggunakan periode global aktif: {seasonal_scope_label}. "
+        "Dengan demikian, stakeholder dapat melihat pola rata-rata sesuai periode yang dipilih di sidebar."
     )
 
     heatmap_df = (
