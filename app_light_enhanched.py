@@ -556,6 +556,91 @@ def risk_rate_label_and_color(value):
     return "RISIKO SANGAT TINGGI", "#7C3AED"
 
 
+def stakeholder_action_from_ispu(avg_value, unhealthy_pct):
+    """Narasi aksi singkat yang tetap dinamis mengikuti filter aktif."""
+    if pd.isna(avg_value):
+        return "Data pada filter aktif belum cukup untuk menyusun arahan tindak lanjut."
+
+    if avg_value > 100 or unhealthy_pct >= 20:
+        return (
+            "Arah tindak lanjut: prioritaskan pemantauan intensif pada lokasi/periode dengan risiko tertinggi, "
+            "gunakan komunikasi risiko untuk kelompok rentan, dan evaluasi sumber emisi dominan pada periode tersebut."
+        )
+
+    if avg_value > 50:
+        return (
+            "Arah tindak lanjut: kondisi masih perlu dipantau karena rata-rata sudah melewati batas BAIK. "
+            "Pertahankan pemantauan rutin dan siapkan peringatan dini bila tren mendekati ambang Tidak Sehat+."
+        )
+
+    return (
+        "Arah tindak lanjut: kondisi relatif terkendali pada filter aktif. "
+        "Fokus pada pemeliharaan pemantauan dan deteksi dini jika terjadi kenaikan."
+    )
+
+
+def stakeholder_action_from_trend(direction, unhealthy_period_count, total_period_count):
+    if total_period_count <= 0:
+        return "Belum cukup periode untuk memberikan arahan tren."
+
+    if unhealthy_period_count > 0:
+        return (
+            f"Terdapat {unhealthy_period_count} dari {total_period_count} periode agregat yang berada di atas ambang 100. "
+            "Periode tersebut dapat dijadikan prioritas pengecekan operasional dan komunikasi risiko."
+        )
+
+    if direction == "memburuk":
+        return (
+            "Walaupun belum melewati ambang Tidak Sehat+, arah tren meningkat sehingga perlu dipantau sebagai early warning."
+        )
+
+    if direction == "membaik":
+        return (
+            "Arah tren membaik. Praktik atau kondisi pada periode yang lebih baik dapat dijadikan pembanding untuk evaluasi."
+        )
+
+    return "Tren relatif stabil. Fokus pemantauan diarahkan pada periode dengan nilai puncak."
+
+
+def stakeholder_action_from_station(gap_value, worst_risk_pct):
+    if worst_risk_pct >= 20:
+        return (
+            "Prioritas intervensi spasial sebaiknya diarahkan pada stasiun dengan persentase Tidak Sehat+ tertinggi, "
+            "karena risiko paparan relatif lebih sering muncul pada lokasi tersebut."
+        )
+
+    if gap_value >= 15:
+        return (
+            "Terdapat gap kualitas udara yang cukup nyata antar stasiun. "
+            "Perlu ditinjau faktor lokal yang membedakan stasiun dengan nilai tertinggi dan terendah."
+        )
+
+    return (
+        "Perbedaan antar stasiun relatif tidak terlalu lebar pada filter aktif. "
+        "Pemantauan dapat difokuskan pada perubahan temporal dan pencemar dominan."
+    )
+
+
+def stakeholder_action_from_season(worst_month_value):
+    if pd.isna(worst_month_value):
+        return "Belum cukup data untuk menyusun arahan musiman."
+
+    if worst_month_value > 100:
+        return (
+            "Bulan dengan nilai tertinggi sudah melewati ambang Tidak Sehat+, sehingga periode tersebut layak menjadi prioritas pengawasan musiman."
+        )
+
+    if worst_month_value > 50:
+        return (
+            "Bulan dengan nilai tertinggi berada di atas batas BAIK. "
+            "Gunakan pola ini untuk menyusun jadwal pemantauan dan komunikasi risiko secara preventif."
+        )
+
+    return (
+        "Secara musiman nilai tertinggi masih berada pada level relatif terkendali, tetapi pemantauan berkala tetap diperlukan."
+    )
+
+
 def pollutant_color(pollutant):
     return CRITICAL_COLORS.get(str(pollutant).upper(), "#334155")
 
@@ -783,7 +868,6 @@ st.markdown(
         <div class="hero-title">Executive BI Dashboard Kualitas Udara Jakarta</div>
         <div class="hero-subtitle">
             Dashboard analisis ISPU Jakarta ini sudah mengikuti feedback asesor dan menambahkan mode chart kategori:
-            kolom dengan missing value lebih dari 50% tidak diimputasi, sehingga PM2.5 di-drop dari dataset hasil cleaning.
             Visualisasi ditingkatkan agar tidak hanya menampilkan data, tetapi juga informasi melalui garis ambang ISPU. Seluruh periode analisis dikendalikan melalui filter global di sidebar.
         </div>
         <span class="source-pill">Sumber dataset: D00_ispu_jakarta_final_sot_v5_drop_over50.csv</span>
@@ -928,14 +1012,16 @@ with tab1:
 
     worst_station = station_summary.iloc[0]["stasiun"]
     best_station = station_summary.iloc[-1]["stasiun"]
+    overview_action = stakeholder_action_from_ispu(avg_ispu, pct_unhealthy)
+
     insight_box(
         "Analisis & insight overview",
         (
-            f"Rata-rata ISPU pada filter aktif adalah <b>{avg_ispu:.1f}</b>. "
-            f"Nilai ini perlu dibaca terhadap ambang 50 dan 100. Di atas 50, kondisi tidak lagi berada pada kategori BAIK; "
-            f"di atas 100, observasi mulai masuk Tidak Sehat+. Proporsi Tidak Sehat+ adalah "
-            f"<b>{pct_unhealthy:.1f}%</b>, dengan pencemar dominan <b>{dominant_pollutant}</b>. "
-            f"Prioritas perhatian diarahkan ke <b>{worst_station}</b>, sedangkan <b>{best_station}</b> menjadi pembanding performa relatif terbaik."
+            f"Pada filter aktif, rata-rata ISPU adalah <b>{avg_ispu:.1f}</b> dengan kelas <b>{avg_category}</b>. "
+            f"Proporsi observasi Tidak Sehat+ mencapai <b>{pct_unhealthy:.1f}%</b>, sehingga perlu dibaca sebagai indikator frekuensi risiko, "
+            f"bukan hanya nilai rata-rata. Pencemar yang paling sering menjadi critical adalah <b>{dominant_pollutant}</b>. "
+            f"Lokasi prioritas berdasarkan rata-rata ISPU adalah <b>{worst_station}</b>, sedangkan <b>{best_station}</b> dapat menjadi pembanding kondisi relatif lebih baik. "
+            f"<br><br><b>{overview_action}</b>"
         ),
         icon="✅",
     )
@@ -1047,14 +1133,20 @@ with tab2:
     change = last_value - first_value
     direction = "memburuk" if change > 0 else "membaik" if change < 0 else "relatif stabil"
     worst_period = trend_overall.loc[trend_overall["rata_rata_ispu"].idxmax()]
+    best_period = trend_overall.loc[trend_overall["rata_rata_ispu"].idxmin()]
+    unhealthy_period_count = int((trend_overall["rata_rata_ispu"] > 100).sum())
+    total_period_count = int(len(trend_overall))
+    temporal_action = stakeholder_action_from_trend(direction, unhealthy_period_count, total_period_count)
 
     insight_box(
         "Analisis & insight tren temporal",
         (
-            f"Tren pada granularitas <b>{granularity.lower()}</b> untuk cakupan <b>{temporal_scope_label}</b> terlihat <b>{direction}</b> dari awal ke akhir periode "
-            f"dengan perubahan <b>{change:+.1f}</b> poin. Periode terburuk adalah <b>{worst_period[overall_x_col]}</b> "
-            f"({worst_period['rata_rata_ispu']:.1f}). Garis ambang 100 membantu mengidentifikasi periode ketika rata-rata ISPU "
-            f"mulai memasuki zona Tidak Sehat+."
+            f"Tren pada granularitas <b>{granularity.lower()}</b> untuk periode <b>{temporal_scope_label}</b> terlihat <b>{direction}</b> "
+            f"dengan perubahan <b>{change:+.1f}</b> poin dari awal ke akhir periode. "
+            f"Periode terburuk adalah <b>{worst_period[overall_x_col]}</b> ({worst_period['rata_rata_ispu']:.1f}), "
+            f"sedangkan periode terbaik adalah <b>{best_period[overall_x_col]}</b> ({best_period['rata_rata_ispu']:.1f}). "
+            f"Terdapat <b>{unhealthy_period_count}</b> dari <b>{total_period_count}</b> periode agregat yang melewati ambang 100. "
+            f"<br><br><b>{temporal_action}</b>"
         ),
         icon="📈",
     )
@@ -1222,6 +1314,8 @@ with tab3:
     worst_avg = avg_station.iloc[0]
     best_avg = avg_station.iloc[-1]
     worst_risk = avg_station.sort_values("persentase_tidak_sehat_plus", ascending=False).iloc[0]
+    station_gap = float(worst_avg["rata_rata_ispu"] - best_avg["rata_rata_ispu"])
+    station_action = stakeholder_action_from_station(station_gap, float(worst_risk["persentase_tidak_sehat_plus"]))
 
     insight_box(
         "Analisis & insight antar stasiun",
@@ -1229,8 +1323,10 @@ with tab3:
             f"Stasiun dengan rata-rata ISPU tertinggi adalah <b>{worst_avg['stasiun']}</b> "
             f"({worst_avg['rata_rata_ispu']:.1f}), sedangkan yang terendah adalah "
             f"<b>{best_avg['stasiun']}</b> ({best_avg['rata_rata_ispu']:.1f}). "
+            f"Gap antar keduanya sebesar <b>{station_gap:.1f}</b> poin, yang membantu membaca ketimpangan kondisi antar lokasi. "
             f"Dari sisi proporsi risiko, <b>{worst_risk['stasiun']}</b> memiliki persentase Tidak Sehat+ tertinggi "
-            f"({worst_risk['persentase_tidak_sehat_plus']:.1f}%)."
+            f"(<b>{worst_risk['persentase_tidak_sehat_plus']:.1f}%</b>). "
+            f"<br><br><b>{station_action}</b>"
         ),
         icon="📍",
     )
@@ -1470,13 +1566,28 @@ with tab4:
     dominant_pollutant = critical_count.iloc[0]["critical"]
     dominant_pct = critical_count.iloc[0]["persentase"]
 
+    station_top_pollutant = (
+        critical_station.sort_values(["stasiun", "jumlah"], ascending=[True, False])
+        .groupby("stasiun")
+        .head(1)
+    )
+    pollutant_pattern = "; ".join(
+        [f"{row['stasiun']}: {row['critical_display']}" for _, row in station_top_pollutant.iterrows()]
+    )
+    dominant_action = (
+        "Arah tindak lanjut: gunakan parameter dominan ini sebagai fokus awal evaluasi sumber emisi dan strategi pengendalian pada periode aktif."
+        if dominant_pct >= 50
+        else "Arah tindak lanjut: karena dominasi pencemar relatif tersebar, evaluasi perlu dilakukan per stasiun dan per periode, bukan hanya pada satu parameter."
+    )
+
     insight_box(
         "Analisis & insight pencemar kritis",
         (
-            f"Parameter paling dominan sebagai pencemar kritis adalah <b>{dominant_pollutant}</b> "
-            f"dengan proporsi <b>{dominant_pct:.1f}%</b>. Karena PM2.5 di-drop pada dataset setelah cleaning, interpretasi pencemar kritis "
-            f"dibatasi pada polutan aktif final: <b>{', '.join([c.upper() for c in pollutant_cols])}</b>. "
-            f"Dashboard ini tidak lagi menyimpulkan dominasi PM2.5 sebagai hasil final."
+            f"Pada filter aktif, parameter yang paling sering menjadi pencemar kritis adalah <b>{dominant_pollutant}</b> "
+            f"dengan proporsi <b>{dominant_pct:.1f}%</b>. Pola dominan per stasiun adalah: <b>{pollutant_pattern}</b>. "
+            f"Informasi ini membantu stakeholder menentukan parameter mana yang perlu menjadi prioritas pemantauan, "
+            f"terutama ketika pola pencemar berbeda antar lokasi. "
+            f"<br><br><b>{dominant_action}</b>"
         ),
         icon="🏭",
     )
@@ -1569,15 +1680,19 @@ with tab5:
     worst_month = month_summary.loc[month_summary["rata_rata_ispu"].idxmax()]
     best_month = month_summary.loc[month_summary["rata_rata_ispu"].idxmin()]
     worst_season = season_summary.iloc[0]
+    best_season = season_summary.iloc[-1]
+    seasonal_action = stakeholder_action_from_season(float(worst_month["rata_rata_ispu"]))
 
     insight_box(
         "Analisis & insight pola musiman",
         (
-            f"Pada cakupan <b>{seasonal_scope_label}</b>, bulan dengan rata-rata ISPU terburuk adalah <b>{worst_month['bulan_abbr']}</b> "
+            f"Pada periode <b>{seasonal_scope_label}</b>, bulan dengan rata-rata ISPU terburuk adalah <b>{worst_month['bulan_abbr']}</b> "
             f"({worst_month['rata_rata_ispu']:.1f}), sedangkan bulan terbaik adalah "
             f"<b>{best_month['bulan_abbr']}</b> ({best_month['rata_rata_ispu']:.1f}). "
-            f"Musim terburuk adalah <b>{worst_season['musim']}</b>. Garis ambang memperjelas apakah rata-rata periode "
-            f"masih berada pada zona BAIK/SEDANG atau mendekati Tidak Sehat+."
+            f"Musim dengan rata-rata tertinggi adalah <b>{worst_season['musim']}</b> "
+            f"({worst_season['rata_rata_ispu']:.1f}), sedangkan musim terendah adalah <b>{best_season['musim']}</b> "
+            f"({best_season['rata_rata_ispu']:.1f}). "
+            f"<br><br><b>{seasonal_action}</b>"
         ),
         icon="🗓️",
     )
