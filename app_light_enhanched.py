@@ -11,7 +11,7 @@ import streamlit as st
 # PAGE CONFIG
 # =============================================================================
 st.set_page_config(
-    page_title="Dashboard ISPU Jakarta V5",
+    page_title="Dashboard ISPU Jakarta",
     page_icon="🌤️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -288,7 +288,7 @@ TIDAK_SEHAT_THRESHOLD = 100
 # =============================================================================
 # DATA
 # =============================================================================
-@st.cache_data(show_spinner="Memuat dataset final ISPU Jakarta V5...")
+@st.cache_data(show_spinner="Memuat dataset ISPU Jakarta hasil cleaning...")
 def load_data(path: str = DATA_FILE):
     candidate_paths = [
         Path(path),
@@ -336,6 +336,82 @@ def apply_global_filters(df, stations, date_range):
         start, end = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
         out = out[(out["tanggal"] >= start) & (out["tanggal"] <= end)]
     return out
+
+
+def year_scope_filter(df, scope_mode, single_year=None, year_range=None):
+    """Filter tambahan khusus untuk chart temporal/musiman agar bisa fokus ke 1 tahun atau rentang tahun."""
+    out = df.copy()
+
+    if scope_mode == "Tahun tunggal" and single_year is not None:
+        out = out[out["tahun"] == int(single_year)].copy()
+
+    elif scope_mode == "Rentang tahun" and year_range is not None:
+        start_year, end_year = int(year_range[0]), int(year_range[1])
+        out = out[(out["tahun"] >= start_year) & (out["tahun"] <= end_year)].copy()
+
+    return out
+
+
+def period_scope_controls(df, key_prefix, default_mode="Tahun tunggal"):
+    """Komponen UI reusable untuk memilih cakupan periode pada grafik temporal/musiman."""
+    available_years = sorted(df["tahun"].dropna().astype(int).unique().tolist())
+
+    if not available_years:
+        return df.copy(), "Seluruh data terfilter", None, None, "Seluruh data terfilter"
+
+    mode_options = ["Seluruh data terfilter", "Tahun tunggal", "Rentang tahun"]
+    default_index = mode_options.index(default_mode) if default_mode in mode_options else 0
+
+    scope_mode = st.radio(
+        "Cakupan periode visualisasi",
+        mode_options,
+        horizontal=True,
+        index=default_index,
+        key=f"{key_prefix}_scope_mode",
+        help=(
+            "Gunakan Tahun tunggal untuk monitoring Jan–Des dalam satu tahun. "
+            "Gunakan Rentang tahun untuk melihat rata-rata pada beberapa tahun tertentu."
+        ),
+    )
+
+    single_year = None
+    year_range = None
+
+    if scope_mode == "Tahun tunggal":
+        single_year = st.selectbox(
+            "Tahun fokus",
+            available_years,
+            index=len(available_years) - 1,
+            key=f"{key_prefix}_single_year",
+            help="Visualisasi hanya menggunakan data pada tahun yang dipilih.",
+        )
+        scoped_df = year_scope_filter(df, scope_mode, single_year=single_year)
+        scope_label = f"Tahun {single_year}"
+
+    elif scope_mode == "Rentang tahun":
+        min_year, max_year = min(available_years), max(available_years)
+        year_range = st.slider(
+            "Rentang tahun fokus",
+            min_value=min_year,
+            max_value=max_year,
+            value=(min_year, max_year),
+            step=1,
+            key=f"{key_prefix}_year_range",
+            help="Visualisasi hanya menggunakan data dalam rentang tahun yang dipilih.",
+        )
+        scoped_df = year_scope_filter(df, scope_mode, year_range=year_range)
+        scope_label = f"Tahun {year_range[0]}–{year_range[1]}"
+
+    else:
+        scoped_df = df.copy()
+        scope_label = "Seluruh data terfilter"
+
+    if scoped_df.empty:
+        st.warning("Tidak ada data pada cakupan periode yang dipilih. Ubah tahun/rentang tahun atau filter global.")
+    else:
+        st.caption(f"Cakupan aktif untuk visualisasi ini: {scope_label}.")
+
+    return scoped_df, scope_mode, single_year, year_range, scope_label
 
 
 # =============================================================================
@@ -450,7 +526,7 @@ def critical_legend_note(pollutant_cols):
         f"""
         <div class="threshold-note">
             <span class="threshold-pill">Pencemar kritis = parameter dengan nilai ISPU tertinggi pada baris yang sama</span>
-            <span class="threshold-pill">Polutan aktif V5: {pollutant_text}</span>
+            <span class="threshold-pill">Polutan aktif: {pollutant_text}</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -525,50 +601,50 @@ def add_unhealthy_rate_reference(fig, target=20):
     return fig
 
 
-def period_trend(df, granularity, focus_year=None):
+def period_trend(df, granularity, monthly_x_mode="Jan–Des"):
     if granularity == "Harian":
         return df.groupby("tanggal", as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tanggal"), "tanggal", "Tanggal"
 
     if granularity == "Bulanan":
         working = df.copy()
-        x_col = "tahun_bulan"
-        x_title = "Bulan"
-
-        # Untuk kebutuhan monitoring stakeholder, mode bulanan dapat difokuskan ke 1 tahun.
-        # X-axis menjadi Jan–Des, bukan deret panjang lintas tahun.
-        if focus_year is not None:
-            working = working[working["tahun"] == focus_year].copy()
-            x_col = "bulan_abbr"
+        if monthly_x_mode == "Jan–Des":
+            trend = (
+                working.groupby(["bulan", "bulan_abbr"], as_index=False)
+                .agg(rata_rata_ispu=("max", "mean"))
+                .sort_values("bulan")
+            )
+            return trend, "bulan_abbr", "Bulan"
 
         trend = (
-            working.groupby(["bulan", x_col], as_index=False)
+            working.groupby("tahun_bulan", as_index=False)
             .agg(rata_rata_ispu=("max", "mean"))
-            .sort_values("bulan")
+            .sort_values("tahun_bulan")
         )
-        return trend, x_col, x_title
+        return trend, "tahun_bulan", "Bulan"
 
     return df.groupby("tahun", as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun"), "tahun", "Tahun"
 
 
-def station_period_trend(df, granularity, focus_year=None):
+def station_period_trend(df, granularity, monthly_x_mode="Jan–Des"):
     if granularity == "Harian":
         return df.groupby(["tanggal", "stasiun"], as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tanggal"), "tanggal"
 
     if granularity == "Bulanan":
         working = df.copy()
-        x_col = "tahun_bulan"
-
-        # Untuk mode bulanan yang terpantau per tahun, tampilkan Jan–Des pada tahun fokus.
-        if focus_year is not None:
-            working = working[working["tahun"] == focus_year].copy()
-            x_col = "bulan_abbr"
+        if monthly_x_mode == "Jan–Des":
+            trend = (
+                working.groupby(["bulan", "bulan_abbr", "stasiun"], as_index=False)
+                .agg(rata_rata_ispu=("max", "mean"))
+                .sort_values("bulan")
+            )
+            return trend, "bulan_abbr"
 
         trend = (
-            working.groupby(["bulan", x_col, "stasiun"], as_index=False)
+            working.groupby(["tahun_bulan", "stasiun"], as_index=False)
             .agg(rata_rata_ispu=("max", "mean"))
-            .sort_values("bulan")
+            .sort_values("tahun_bulan")
         )
-        return trend, x_col
+        return trend, "tahun_bulan"
 
     return df.groupby(["tahun", "stasiun"], as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun"), "tahun"
 
@@ -591,11 +667,11 @@ st.markdown(
     <div class="hero">
         <div class="hero-title">Executive BI Dashboard Kualitas Udara Jakarta</div>
         <div class="hero-subtitle">
-            Dashboard V5 untuk analisis ISPU Jakarta. Dashboard ini sudah mengikuti feedback asesor dan menambahkan mode chart kategori:
-            kolom dengan missing value lebih dari 50% tidak diimputasi, sehingga PM2.5 di-drop dari source of truth.
+            Dashboard analisis ISPU Jakarta ini sudah mengikuti feedback asesor dan menambahkan mode chart kategori:
+            kolom dengan missing value lebih dari 50% tidak diimputasi, sehingga PM2.5 di-drop dari dataset hasil cleaning.
             Visualisasi ditingkatkan agar tidak hanya menampilkan data, tetapi juga informasi melalui garis ambang ISPU.
         </div>
-        <span class="source-pill">Source of truth: D00_ispu_jakarta_final_sot_v5_drop_over50.csv</span>
+        <span class="source-pill">Sumber dataset: D00_ispu_jakarta_final_sot_v5_drop_over50.csv</span>
     </div>
     """,
     unsafe_allow_html=True,
@@ -617,9 +693,9 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    st.markdown("### Catatan Dataset V5")
-    st.caption("PM2.5 di-drop karena missing value >50%.")
-    st.caption(f"Polutan aktif final: {', '.join([c.upper() for c in pollutant_cols])}.")
+    st.markdown("### Catatan Dataset")
+    st.caption("PM2.5 di-drop karena missing value lebih dari 50%.")
+    st.caption(f"Polutan aktif: {', '.join([c.upper() for c in pollutant_cols])}.")
     st.caption("Ambang informasi: ISPU 50 = batas BAIK; ISPU 100 = mulai Tidak Sehat+.")
 
 filtered_df = apply_global_filters(df, selected_stations, selected_date_range)
@@ -758,47 +834,57 @@ with tab2:
     granularity = st.radio("Granularitas", ["Harian", "Bulanan", "Tahunan"], horizontal=True, index=1)
     compare_mode = st.radio("Mode perbandingan", ["Rata-rata Jakarta", "Per Stasiun"], horizontal=True, index=1)
 
-    focus_year = None
+    temporal_df, temporal_scope_mode, temporal_single_year, temporal_year_range, temporal_scope_label = period_scope_controls(
+        filtered_df,
+        key_prefix="temporal",
+        default_mode="Tahun tunggal" if granularity == "Bulanan" else "Seluruh data terfilter",
+    )
+
+    monthly_x_mode = "Jan–Des"
     if granularity == "Bulanan":
-        available_years = sorted(filtered_df["tahun"].dropna().astype(int).unique().tolist())
-        default_year_index = len(available_years) - 1 if available_years else 0
-        focus_year = st.selectbox(
-            "Tahun fokus untuk tampilan bulanan",
-            available_years,
-            index=default_year_index,
+        monthly_x_mode = st.radio(
+            "Mode sumbu X bulanan",
+            ["Jan–Des", "Bulan lintas tahun"],
+            horizontal=True,
+            index=0,
+            key="temporal_monthly_x_mode",
             help=(
-                "Mode bulanan difokuskan ke satu tahun agar sumbu X hanya menampilkan Jan–Des. "
-                "Ini lebih sesuai untuk monitoring dan pengambilan insight dalam periode tahunan."
+                "Jan–Des menampilkan rata-rata per bulan dalam tahun/rentang aktif. "
+                "Bulan lintas tahun menampilkan urutan YYYY-MM untuk melihat perubahan antar bulan secara kronologis."
             ),
         )
         st.caption(
-            f"Mode bulanan aktif: grafik menampilkan pola Jan–Des tahun {focus_year}, bukan deret bulan lintas tahun."
+            "Mode Jan–Des cocok untuk melihat rata-rata bulanan dalam satu tahun atau rentang tahun. "
+            "Mode Bulan lintas tahun cocok untuk audit tren kronologis."
         )
 
     threshold_note()
 
+    if temporal_df.empty:
+        st.stop()
+
     if compare_mode == "Rata-rata Jakarta":
-        trend_df, x_col, x_title = period_trend(filtered_df, granularity, focus_year)
+        trend_df, x_col, x_title = period_trend(temporal_df, granularity, monthly_x_mode)
         fig_trend = px.line(
             trend_df,
             x=x_col,
             y="rata_rata_ispu",
             markers=True,
-            title=f"Tren Rata-rata ISPU Jakarta ({granularity})" + (f" — Tahun {focus_year}" if focus_year is not None else ""),
+            title=f"Tren Rata-rata ISPU Jakarta ({granularity}) — {temporal_scope_label}",
             labels={x_col: x_title, "rata_rata_ispu": "Rata-rata ISPU"},
             category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
         )
         fig_trend.update_traces(line=dict(width=3, color="#B45309"), marker=dict(size=7))
         y_hint = trend_df["rata_rata_ispu"].max()
     else:
-        trend_df, x_col = station_period_trend(filtered_df, granularity, focus_year)
+        trend_df, x_col = station_period_trend(temporal_df, granularity, monthly_x_mode)
         fig_trend = px.line(
             trend_df,
             x=x_col,
             y="rata_rata_ispu",
             color="stasiun",
             markers=True,
-            title=f"Perbandingan Tren ISPU Antar Stasiun ({granularity})" + (f" — Tahun {focus_year}" if focus_year is not None else ""),
+            title=f"Perbandingan Tren ISPU Antar Stasiun ({granularity}) — {temporal_scope_label}",
             labels={x_col: granularity, "rata_rata_ispu": "Rata-rata ISPU", "stasiun": "Stasiun"},
             category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
         )
@@ -808,7 +894,7 @@ with tab2:
     fig_trend = add_ispu_threshold_lines(fig_trend, y_hint)
     st.plotly_chart(style_plotly(fig_trend, height=500), use_container_width=True)
 
-    trend_overall, overall_x_col, _ = period_trend(filtered_df, granularity, focus_year)
+    trend_overall, overall_x_col, _ = period_trend(temporal_df, granularity, monthly_x_mode)
     trend_overall["perubahan_vs_periode_sebelumnya"] = trend_overall["rata_rata_ispu"].diff()
     significant_change = trend_overall.dropna(subset=["perubahan_vs_periode_sebelumnya"]).copy()
 
@@ -842,7 +928,7 @@ with tab2:
     insight_box(
         "Analisis & insight tren temporal",
         (
-            f"Tren pada granularitas <b>{granularity.lower()}</b> terlihat <b>{direction}</b> dari awal ke akhir periode "
+            f"Tren pada granularitas <b>{granularity.lower()}</b> untuk cakupan <b>{temporal_scope_label}</b> terlihat <b>{direction}</b> dari awal ke akhir periode "
             f"dengan perubahan <b>{change:+.1f}</b> poin. Periode terburuk adalah <b>{worst_period[overall_x_col]}</b> "
             f"({worst_period['rata_rata_ispu']:.1f}). Garis ambang 100 membantu mengidentifikasi periode ketika rata-rata ISPU "
             f"mulai memasuki zona Tidak Sehat+."
@@ -1179,35 +1265,49 @@ with tab4:
 
     trend_granularity = st.radio("Granularitas tren pencemar kritis", ["Bulanan", "Tahunan"], horizontal=True)
 
-    critical_focus_year = None
+    critical_scope_df, critical_scope_mode, critical_single_year, critical_year_range, critical_scope_label = period_scope_controls(
+        filtered_df,
+        key_prefix="critical",
+        default_mode="Tahun tunggal" if trend_granularity == "Bulanan" else "Seluruh data terfilter",
+    )
+
+    critical_monthly_x_mode = "Jan–Des"
     if trend_granularity == "Bulanan":
-        available_years_critical = sorted(filtered_df["tahun"].dropna().astype(int).unique().tolist())
-        default_critical_year_index = len(available_years_critical) - 1 if available_years_critical else 0
-        critical_focus_year = st.selectbox(
-            "Tahun fokus tren pencemar bulanan",
-            available_years_critical,
-            index=default_critical_year_index,
+        critical_monthly_x_mode = st.radio(
+            "Mode sumbu X pencemar bulanan",
+            ["Jan–Des", "Bulan lintas tahun"],
+            horizontal=True,
+            index=0,
+            key="critical_monthly_x_mode",
             help=(
-                "Gunakan tahun fokus agar tren pencemar kritis bulanan dibaca sebagai pola Jan–Des dalam satu tahun, "
-                "bukan rangkaian bulan lintas tahun."
+                "Jan–Des menampilkan rata-rata/akumulasi per bulan dalam tahun/rentang aktif. "
+                "Bulan lintas tahun menampilkan urutan YYYY-MM secara kronologis."
             ),
-            key="critical_focus_year",
-        )
-        st.caption(
-            f"Mode bulanan aktif: tren pencemar kritis menampilkan Jan–Des tahun {critical_focus_year}."
         )
 
-        critical_working = filtered_df[filtered_df["tahun"] == critical_focus_year].copy()
-        critical_trend = (
-            critical_working.groupby(["bulan", "bulan_abbr", "critical_display"], as_index=False)
-            .size()
-            .rename(columns={"size": "jumlah"})
-            .sort_values("bulan")
-        )
-        trend_x = "bulan_abbr"
+    if critical_scope_df.empty:
+        st.stop()
+
+    if trend_granularity == "Bulanan":
+        if critical_monthly_x_mode == "Jan–Des":
+            critical_trend = (
+                critical_scope_df.groupby(["bulan", "bulan_abbr", "critical_display"], as_index=False)
+                .size()
+                .rename(columns={"size": "jumlah"})
+                .sort_values("bulan")
+            )
+            trend_x = "bulan_abbr"
+        else:
+            critical_trend = (
+                critical_scope_df.groupby(["tahun_bulan", "critical_display"], as_index=False)
+                .size()
+                .rename(columns={"size": "jumlah"})
+                .sort_values("tahun_bulan")
+            )
+            trend_x = "tahun_bulan"
     else:
         critical_trend = (
-            filtered_df.groupby(["tahun", "critical_display"], as_index=False)
+            critical_scope_df.groupby(["tahun", "critical_display"], as_index=False)
             .size()
             .rename(columns={"size": "jumlah"})
             .sort_values("tahun")
@@ -1220,7 +1320,7 @@ with tab4:
         y="jumlah",
         color="critical_display",
         markers=True,
-        title=f"Tren Kemunculan Pencemar Kritis ({trend_granularity})" + (f" — Tahun {critical_focus_year}" if critical_focus_year is not None else ""),
+        title=f"Tren Kemunculan Pencemar Kritis ({trend_granularity}) — {critical_scope_label}",
         labels={trend_x: "Bulan" if trend_x == "bulan_abbr" else "Periode", "jumlah": "Jumlah Kemunculan", "critical_display": "Pencemar"},
         color_discrete_map=CRITICAL_COLORS,
         category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
@@ -1235,7 +1335,7 @@ with tab4:
         "Analisis & insight pencemar kritis",
         (
             f"Parameter paling dominan sebagai pencemar kritis adalah <b>{dominant_pollutant}</b> "
-            f"dengan proporsi <b>{dominant_pct:.1f}%</b>. Karena PM2.5 di-drop pada V5, interpretasi pencemar kritis "
+            f"dengan proporsi <b>{dominant_pct:.1f}%</b>. Karena PM2.5 di-drop pada dataset setelah cleaning, interpretasi pencemar kritis "
             f"dibatasi pada polutan aktif final: <b>{', '.join([c.upper() for c in pollutant_cols])}</b>. "
             f"Dashboard ini tidak lagi menyimpulkan dominasi PM2.5 sebagai hasil final."
         ),
@@ -1252,8 +1352,22 @@ with tab5:
     season_mapping_note()
     category_legend_note()
 
+    seasonal_df, seasonal_scope_mode, seasonal_single_year, seasonal_year_range, seasonal_scope_label = period_scope_controls(
+        filtered_df,
+        key_prefix="seasonal",
+        default_mode="Tahun tunggal",
+    )
+
+    if seasonal_df.empty:
+        st.stop()
+
+    st.caption(
+        f"Seluruh visualisasi musiman di tab ini menggunakan cakupan: {seasonal_scope_label}. "
+        "Dengan demikian, stakeholder dapat melihat pola rata-rata dalam satu tahun atau rentang tahun tertentu."
+    )
+
     heatmap_df = (
-        filtered_df.groupby(["stasiun", "bulan", "bulan_abbr"], as_index=False)
+        seasonal_df.groupby(["stasiun", "bulan", "bulan_abbr"], as_index=False)
         .agg(rata_rata_ispu=("max", "mean"))
         .sort_values("bulan")
     )
@@ -1263,7 +1377,7 @@ with tab5:
         x="bulan_abbr",
         y="stasiun",
         z="rata_rata_ispu",
-        title="Heatmap Rata-rata ISPU berdasarkan Bulan dan Stasiun",
+        title=f"Heatmap Rata-rata ISPU berdasarkan Bulan dan Stasiun — {seasonal_scope_label}",
         category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
         color_continuous_scale=[[0, "#15803D"], [0.35, "#D97706"], [0.7, "#DC2626"], [1, "#7F1D1D"]],
         labels={"bulan_abbr": "Bulan", "stasiun": "Stasiun", "rata_rata_ispu": "Rata-rata ISPU"},
@@ -1283,7 +1397,7 @@ with tab5:
     with col_month:
         threshold_note()
         month_summary = (
-            filtered_df.groupby(["bulan", "bulan_abbr"], as_index=False)
+            seasonal_df.groupby(["bulan", "bulan_abbr"], as_index=False)
             .agg(rata_rata_ispu=("max", "mean"))
             .sort_values("bulan")
         )
@@ -1291,7 +1405,7 @@ with tab5:
             month_summary,
             x="bulan_abbr",
             y="rata_rata_ispu",
-            title="Rata-rata ISPU per Bulan",
+            title=f"Rata-rata ISPU per Bulan — {seasonal_scope_label}",
             category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
             labels={"bulan_abbr": "Bulan", "rata_rata_ispu": "Rata-rata ISPU"},
             text=month_summary["rata_rata_ispu"].round(1),
@@ -1303,7 +1417,7 @@ with tab5:
     with col_season:
         threshold_note()
         season_summary = (
-            filtered_df.groupby("musim", as_index=False)
+            seasonal_df.groupby("musim", as_index=False)
             .agg(rata_rata_ispu=("max", "mean"), jumlah_observasi=("max", "size"))
             .sort_values("rata_rata_ispu", ascending=False)
         )
@@ -1311,7 +1425,7 @@ with tab5:
             season_summary,
             x="musim",
             y="rata_rata_ispu",
-            title="Rata-rata ISPU per Musim",
+            title=f"Rata-rata ISPU per Musim — {seasonal_scope_label}",
             labels={"musim": "Musim", "rata_rata_ispu": "Rata-rata ISPU"},
             text=season_summary["rata_rata_ispu"].round(1),
         )
@@ -1326,7 +1440,7 @@ with tab5:
     insight_box(
         "Analisis & insight pola musiman",
         (
-            f"Bulan dengan rata-rata ISPU terburuk adalah <b>{worst_month['bulan_abbr']}</b> "
+            f"Pada cakupan <b>{seasonal_scope_label}</b>, bulan dengan rata-rata ISPU terburuk adalah <b>{worst_month['bulan_abbr']}</b> "
             f"({worst_month['rata_rata_ispu']:.1f}), sedangkan bulan terbaik adalah "
             f"<b>{best_month['bulan_abbr']}</b> ({best_month['rata_rata_ispu']:.1f}). "
             f"Musim terburuk adalah <b>{worst_season['musim']}</b>. Garis ambang memperjelas apakah rata-rata periode "
