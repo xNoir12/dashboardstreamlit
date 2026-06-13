@@ -389,16 +389,28 @@ def period_scope_controls(df, key_prefix, default_mode="Tahun tunggal"):
         scope_label = f"Tahun {single_year}"
 
     elif scope_mode == "Rentang tahun":
-        min_year, max_year = min(available_years), max(available_years)
-        year_range = st.slider(
-            "Rentang tahun fokus",
-            min_value=min_year,
-            max_value=max_year,
-            value=(min_year, max_year),
-            step=1,
-            key=f"{key_prefix}_year_range",
-            help="Visualisasi hanya menggunakan data dalam rentang tahun yang dipilih.",
-        )
+        col_start, col_end = st.columns(2)
+
+        with col_start:
+            start_year = st.selectbox(
+                "Tahun awal",
+                available_years,
+                index=0,
+                key=f"{key_prefix}_start_year",
+                help="Pilih tahun awal untuk cakupan visualisasi.",
+            )
+
+        end_year_options = [year for year in available_years if year >= int(start_year)]
+        with col_end:
+            end_year = st.selectbox(
+                "Tahun akhir",
+                end_year_options,
+                index=len(end_year_options) - 1,
+                key=f"{key_prefix}_end_year",
+                help="Pilih tahun akhir. Pilihan otomatis dibatasi agar tidak lebih kecil dari tahun awal.",
+            )
+
+        year_range = (int(start_year), int(end_year))
         scoped_df = year_scope_filter(df, scope_mode, year_range=year_range)
         scope_label = f"Tahun {year_range[0]}–{year_range[1]}"
 
