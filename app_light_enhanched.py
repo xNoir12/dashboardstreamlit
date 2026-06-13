@@ -311,6 +311,11 @@ def load_data(path: str = DATA_FILE):
     df["bulan"] = df["tanggal"].dt.month
     df["bulan_abbr"] = df["bulan"].map(MONTH_ABBR)
     df["tahun_bulan"] = df["tanggal"].dt.to_period("M").astype(str)
+    df["minggu_mulai"] = df["tanggal"].dt.to_period("W-MON").apply(lambda r: r.start_time)
+    df["minggu_selesai"] = df["tanggal"].dt.to_period("W-MON").apply(lambda r: r.end_time)
+    df["label_minggu"] = (
+        df["minggu_mulai"].dt.strftime("%d %b %Y") + " – " + df["minggu_selesai"].dt.strftime("%d %b %Y")
+    )
     df["stasiun_kode"] = df["stasiun"].str.extract(r"(DKI\d)", expand=False).fillna(df["stasiun"])
     df["critical_display"] = df["critical"]
     df["is_tidak_sehat_plus"] = df["categori"].isin(["TIDAK SEHAT", "SANGAT TIDAK SEHAT", "BERBAHAYA"])
@@ -337,7 +342,7 @@ def month_end(year, month):
 
 
 def build_global_period_controls(df):
-    """Filter periode global berbasis dropdown tahun/bulan agar semua tab sinkron."""
+    """Filter periode global berbasis dropdown tahun/bulan dan date range agar semua tab sinkron."""
     min_date = df["tanggal"].min()
     max_date = df["tanggal"].max()
 
@@ -349,12 +354,12 @@ def build_global_period_controls(df):
     st.markdown("### Filter Periode")
     period_mode = st.radio(
         "Mode periode",
-        ["Seluruh periode", "Tahun tunggal", "Rentang tahun", "Rentang bulan"],
+        ["Seluruh periode", "Tahun tunggal", "Rentang tahun", "Rentang bulan", "Rentang tanggal"],
         horizontal=False,
         index=0,
         help=(
             "Filter periode ini berlaku global untuk seluruh dashboard. "
-            "Gunakan Rentang bulan jika ingin memilih bulan dan tahun secara presisi."
+            "Gunakan Rentang tanggal untuk kebutuhan harian, mingguan, atau periode khusus."
         ),
     )
 
@@ -401,7 +406,7 @@ def build_global_period_controls(df):
         period_label = f"Tahun {start_year}–{end_year}"
 
     elif period_mode == "Rentang bulan":
-        st.caption("Pilih bulan dan tahun awal–akhir. Filter ini lebih presisi daripada kalender date picker.")
+        st.caption("Pilih bulan dan tahun awal–akhir untuk analisis bulanan atau musiman.")
 
         col_y1, col_m1 = st.columns(2)
         with col_y1:
@@ -451,8 +456,32 @@ def build_global_period_controls(df):
         end_date = min(end_date, max_date)
         period_label = f"{start_month_label} {start_year} – {end_month_label} {end_year}"
 
-    return period_mode, pd.to_datetime(start_date), pd.to_datetime(end_date), period_label
+    elif period_mode == "Rentang tanggal":
+        st.caption(
+            "Gunakan mode ini untuk monitoring harian, mingguan, atau periode khusus. "
+            "Contoh: pilih 7 hari untuk evaluasi mingguan."
+        )
 
+        date_range = st.date_input(
+            "Rentang tanggal",
+            value=(min_date.date(), max_date.date()),
+            min_value=min_date.date(),
+            max_value=max_date.date(),
+            key="global_exact_date_range",
+            help="Pilih tanggal awal dan akhir secara presisi.",
+        )
+
+        if isinstance(date_range, tuple) and len(date_range) == 2:
+            start_date = pd.to_datetime(date_range[0])
+            end_date = pd.to_datetime(date_range[1])
+        else:
+            start_date = min_date
+            end_date = max_date
+
+        period_days = max((end_date - start_date).days + 1, 1)
+        period_label = f"{start_date.date()} s.d. {end_date.date()} ({period_days} hari)"
+
+    return period_mode, pd.to_datetime(start_date), pd.to_datetime(end_date), period_label
 
 def apply_global_filters(df, stations, start_date, end_date):
     out = df.copy()
@@ -651,7 +680,21 @@ def add_unhealthy_rate_reference(fig, target=20):
 
 def period_trend(df, granularity, monthly_x_mode="Jan–Des"):
     if granularity == "Harian":
-        return df.groupby("tanggal", as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tanggal"), "tanggal", "Tanggal"
+        return (
+            df.groupby("tanggal", as_index=False)
+            .agg(rata_rata_ispu=("max", "mean"))
+            .sort_values("tanggal"),
+            "tanggal",
+            "Tanggal",
+        )
+
+    if granularity == "Mingguan":
+        trend = (
+            df.groupby(["minggu_mulai", "label_minggu"], as_index=False)
+            .agg(rata_rata_ispu=("max", "mean"))
+            .sort_values("minggu_mulai")
+        )
+        return trend, "label_minggu", "Minggu"
 
     if granularity == "Bulanan":
         working = df.copy()
@@ -670,12 +713,31 @@ def period_trend(df, granularity, monthly_x_mode="Jan–Des"):
         )
         return trend, "tahun_bulan", "Bulan"
 
-    return df.groupby("tahun", as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun"), "tahun", "Tahun"
+    return (
+        df.groupby("tahun", as_index=False)
+        .agg(rata_rata_ispu=("max", "mean"))
+        .sort_values("tahun"),
+        "tahun",
+        "Tahun",
+    )
 
 
 def station_period_trend(df, granularity, monthly_x_mode="Jan–Des"):
     if granularity == "Harian":
-        return df.groupby(["tanggal", "stasiun"], as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tanggal"), "tanggal"
+        return (
+            df.groupby(["tanggal", "stasiun"], as_index=False)
+            .agg(rata_rata_ispu=("max", "mean"))
+            .sort_values("tanggal"),
+            "tanggal",
+        )
+
+    if granularity == "Mingguan":
+        trend = (
+            df.groupby(["minggu_mulai", "label_minggu", "stasiun"], as_index=False)
+            .agg(rata_rata_ispu=("max", "mean"))
+            .sort_values("minggu_mulai")
+        )
+        return trend, "label_minggu"
 
     if granularity == "Bulanan":
         working = df.copy()
@@ -694,7 +756,12 @@ def station_period_trend(df, granularity, monthly_x_mode="Jan–Des"):
         )
         return trend, "tahun_bulan"
 
-    return df.groupby(["tahun", "stasiun"], as_index=False).agg(rata_rata_ispu=("max", "mean")).sort_values("tahun"), "tahun"
+    return (
+        df.groupby(["tahun", "stasiun"], as_index=False)
+        .agg(rata_rata_ispu=("max", "mean"))
+        .sort_values("tahun"),
+        "tahun",
+    )
 
 
 # =============================================================================
@@ -881,7 +948,7 @@ with tab2:
     st.subheader("Dashboard 2 — Tren Temporal Kualitas Udara")
     st.caption("Membaca arah perubahan kualitas udara dari waktu ke waktu dengan garis ambang interpretasi ISPU.")
 
-    granularity = st.radio("Granularitas", ["Harian", "Bulanan", "Tahunan"], horizontal=True, index=1)
+    granularity = st.radio("Granularitas", ["Harian", "Mingguan", "Bulanan", "Tahunan"], horizontal=True, index=2)
     compare_mode = st.radio("Mode perbandingan", ["Rata-rata Jakarta", "Per Stasiun"], horizontal=True, index=1)
 
     temporal_df = filtered_df.copy()
@@ -905,6 +972,12 @@ with tab2:
             "Mode Jan–Des cocok untuk melihat rata-rata bulanan dalam periode tersebut."
         )
 
+    if granularity in ["Harian", "Mingguan"]:
+        st.caption(
+            f"Periode global aktif: {global_period_label}. "
+            "Untuk melihat periode harian/mingguan tertentu, gunakan Mode periode 'Rentang tanggal' di sidebar."
+        )
+
     threshold_note()
 
     if compare_mode == "Rata-rata Jakarta":
@@ -916,7 +989,10 @@ with tab2:
             markers=True,
             title=f"Tren Rata-rata ISPU Jakarta ({granularity}) — {temporal_scope_label}",
             labels={x_col: x_title, "rata_rata_ispu": "Rata-rata ISPU"},
-            category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
+            category_orders={
+                "bulan_abbr": list(MONTH_ABBR.values()),
+                "label_minggu": trend_df["label_minggu"].tolist() if "label_minggu" in trend_df.columns else [],
+            },
         )
         fig_trend.update_traces(line=dict(width=3, color="#B45309"), marker=dict(size=7))
         y_hint = trend_df["rata_rata_ispu"].max()
@@ -930,7 +1006,10 @@ with tab2:
             markers=True,
             title=f"Perbandingan Tren ISPU Antar Stasiun ({granularity}) — {temporal_scope_label}",
             labels={x_col: granularity, "rata_rata_ispu": "Rata-rata ISPU", "stasiun": "Stasiun"},
-            category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
+            category_orders={
+                "bulan_abbr": list(MONTH_ABBR.values()),
+                "label_minggu": trend_df["label_minggu"].tolist() if "label_minggu" in trend_df.columns else [],
+            },
         )
         fig_trend.update_traces(line=dict(width=2.5), marker=dict(size=6))
         y_hint = trend_df["rata_rata_ispu"].max()
@@ -1307,7 +1386,7 @@ with tab4:
             icon="🧭",
         )
 
-    trend_granularity = st.radio("Granularitas tren pencemar kritis", ["Bulanan", "Tahunan"], horizontal=True)
+    trend_granularity = st.radio("Granularitas tren pencemar kritis", ["Harian", "Mingguan", "Bulanan", "Tahunan"], horizontal=True, index=2)
 
     critical_scope_df = filtered_df.copy()
     critical_scope_label = global_period_label
@@ -1327,7 +1406,25 @@ with tab4:
         )
         st.caption(f"Periode global aktif: {global_period_label}.")
 
-    if trend_granularity == "Bulanan":
+    if trend_granularity == "Harian":
+        critical_trend = (
+            critical_scope_df.groupby(["tanggal", "critical_display"], as_index=False)
+            .size()
+            .rename(columns={"size": "jumlah"})
+            .sort_values("tanggal")
+        )
+        trend_x = "tanggal"
+
+    elif trend_granularity == "Mingguan":
+        critical_trend = (
+            critical_scope_df.groupby(["minggu_mulai", "label_minggu", "critical_display"], as_index=False)
+            .size()
+            .rename(columns={"size": "jumlah"})
+            .sort_values("minggu_mulai")
+        )
+        trend_x = "label_minggu"
+
+    elif trend_granularity == "Bulanan":
         if critical_monthly_x_mode == "Jan–Des":
             critical_trend = (
                 critical_scope_df.groupby(["bulan", "bulan_abbr", "critical_display"], as_index=False)
@@ -1362,7 +1459,10 @@ with tab4:
         title=f"Tren Kemunculan Pencemar Kritis ({trend_granularity}) — {critical_scope_label}",
         labels={trend_x: "Bulan" if trend_x == "bulan_abbr" else "Periode", "jumlah": "Jumlah Kemunculan", "critical_display": "Pencemar"},
         color_discrete_map=CRITICAL_COLORS,
-        category_orders={"bulan_abbr": list(MONTH_ABBR.values())},
+        category_orders={
+            "bulan_abbr": list(MONTH_ABBR.values()),
+            "label_minggu": critical_trend["label_minggu"].tolist() if "label_minggu" in critical_trend.columns else [],
+        },
     )
     fig_critical_trend.update_traces(line=dict(width=2.5))
     st.plotly_chart(style_plotly(fig_critical_trend, height=470), use_container_width=True)
